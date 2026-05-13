@@ -12,13 +12,14 @@
         <p class="eyebrow">Teacher console</p>
         <h1 id="game-title">Classroom Jeopardy</h1>
       </div>
+      <label class="audio-toggle"><input id="mute-music" type="checkbox"> Mute music</label>
       <div class="session-pill">Code <strong id="session-code">-----</strong></div>
     </header>
 
     <main class="layout">
       <section class="board-panel">
         <div class="actions">
-          <button id="start-game">Start game</button>
+          <button id="start-game" class="danger">Reset Game</button>
           <input id="config-path" value="games/example.yaml" aria-label="Game YAML path">
           <button id="refresh-game" class="secondary">Refresh</button>
         </div>
@@ -35,6 +36,7 @@
           <h2>Current clue</h2>
           <div id="current-clue" class="current-clue muted">No clue selected.</div>
           <div id="buzz-status" class="buzz-status"></div>
+          <div id="buzz-timer" class="buzz-timer hidden">10</div>
           <div class="field-row">
             <label for="score-team">Team</label>
             <select id="score-team"></select>

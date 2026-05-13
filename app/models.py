@@ -48,6 +48,8 @@ class TeamState(BaseModel):
     name: str
     score: int = 0
     joined: bool = False
+    students: List[str] = Field(default_factory=list)
+    answered_students: List[str] = Field(default_factory=list)
 
 
 class ClueState(BaseModel):
@@ -80,6 +82,14 @@ class FinalState(BaseModel):
     scored: Dict[str, bool] = Field(default_factory=dict)
 
 
+class ScoreEvent(BaseModel):
+    id: int
+    team_name: str
+    student_name: Optional[str] = None
+    delta: int
+    correct: bool
+
+
 class GameState(BaseModel):
     session_code: str
     title: str
@@ -89,8 +99,14 @@ class GameState(BaseModel):
     phase: str = "board"
     current_clue_id: Optional[str] = None
     buzz_winner: Optional[str] = None
+    buzz_winner_student: Optional[str] = None
+    buzz_expires_at: Optional[float] = None
+    last_buzz_team: Optional[str] = None
+    last_buzz_student: Optional[str] = None
     buzz_order: List[str] = Field(default_factory=list)
     daily_double: DailyDoubleState
+    score_event: Optional[ScoreEvent] = None
+    score_event_id: int = 0
 
 
 class StartGameRequest(BaseModel):
@@ -100,11 +116,13 @@ class StartGameRequest(BaseModel):
 class JoinRequest(BaseModel):
     session_code: str
     team_name: str
+    student_name: str = Field(default="", max_length=80)
 
 
 class BuzzRequest(BaseModel):
     session_code: str
     team_name: str
+    student_name: str = Field(default="", max_length=80)
 
 
 class SelectClueRequest(BaseModel):

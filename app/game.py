@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import secrets
 import string
+import time
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -16,6 +17,7 @@ from .models import (
     FinalState,
     GameConfig,
     GameState,
+    ScoreEvent,
     TeamState,
 )
 
@@ -87,6 +89,13 @@ def find_team(state: GameState, team_name: str) -> TeamState:
     raise GameError(f"unknown team: {team_name}")
 
 
+def normalize_student_name(student_name: str) -> str:
+    normalized = " ".join(student_name.strip().split())
+    if not normalized:
+        raise GameError("student name is required")
+    return normalized
+
+
 def find_clue(state: GameState, clue_id: str) -> ClueState:
     for clue in iter_clues(state.categories):
         if clue.id == clue_id:
@@ -104,9 +113,13 @@ def public_state(state: GameState, reveal_answers: bool = False) -> dict:
     return payload
 
 
-def join_team(state: GameState, team_name: str) -> GameState:
+def join_team(state: GameState, team_name: str, student_name: str = "") -> GameState:
     team = find_team(state, team_name)
     team.joined = True
+    student = normalize_student_name(student_name)
+    existing = {name.lower() for name in team.students}
+    if student.lower() not in existing:
+        team.students.append(student)
     return state
 
 
@@ -120,6 +133,8 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
         find_team(state, selecting_team)
     state.current_clue_id = clue_id
     state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
     state.buzz_order = []
     if clue.is_daily_double:
         state.daily_double.active = True
@@ -132,23 +147,36 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
     return state
 
 
-def buzz(state: GameState, team_name: str) -> GameState:
-    find_team(state, team_name)
+def buzz(state: GameState, team_name: str, student_name: str = "") -> GameState:
+    team = find_team(state, team_name)
+    student = normalize_student_name(student_name)
     if state.phase != "board":
         raise GameError("buzzing is only available during board play")
     if not state.current_clue_id:
         raise GameError("no clue is currently active")
     if state.daily_double.active:
         raise GameError("buzzing is disabled for Daily Double clues")
+    if student.lower() not in {name.lower() for name in team.students}:
+        raise GameError(f"{student} has not joined {team_name}")
+    if len(team.answered_students) >= len(team.students):
+        team.answered_students = []
+    if student.lower() in {name.lower() for name in team.answered_students}:
+        raise GameError(f"{student} has already answered this team cycle")
     if team_name not in state.buzz_order:
         state.buzz_order.append(team_name)
     if state.buzz_winner is None:
         state.buzz_winner = team_name
+        state.buzz_winner_student = student
+        state.buzz_expires_at = time.time() + 10
+        state.last_buzz_team = team_name
+        state.last_buzz_student = student
     return state
 
 
 def reset_buzzer(state: GameState) -> GameState:
     state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
     state.buzz_order = []
     return state
 
@@ -186,10 +214,27 @@ def score_current_clue(
         amount = clue.value
 
     team = find_team(state, scorer)
-    team.score += amount if correct else -amount
+    delta = amount if correct else -amount
+    team.score += delta
+    state.score_event_id += 1
+    state.score_event = ScoreEvent(
+        id=state.score_event_id,
+        team_name=scorer,
+        student_name=state.buzz_winner_student if state.buzz_winner == scorer else None,
+        delta=delta,
+        correct=correct,
+    )
+    if state.buzz_winner == scorer and state.buzz_winner_student:
+        answered = {name.lower() for name in team.answered_students}
+        if state.buzz_winner_student.lower() not in answered:
+            team.answered_students.append(state.buzz_winner_student)
+        if len(team.answered_students) >= len(team.students):
+            team.answered_students = []
     clue.revealed = True
     state.current_clue_id = None
     state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
     state.buzz_order = []
     state.daily_double.active = False
     return state
@@ -199,6 +244,8 @@ def reveal_final(state: GameState) -> GameState:
     state.phase = "final"
     state.current_clue_id = None
     state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
     state.buzz_order = []
     state.final.revealed = True
     return state

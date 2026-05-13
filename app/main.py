@@ -112,14 +112,18 @@ async def join(payload: JoinRequest) -> dict:
     try:
         state = store.update(
             payload.session_code,
-            lambda current: join_team(current, payload.team_name),
+            lambda current: join_team(current, payload.team_name, payload.student_name),
         )
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await broadcast_state(state.session_code)
-    return {"team_name": payload.team_name, "state": public_state(state)}
+    return {
+        "team_name": payload.team_name,
+        "student_name": payload.student_name,
+        "state": public_state(state),
+    }
 
 
 @app.post("/api/buzz")
@@ -127,7 +131,7 @@ async def buzz_route(payload: BuzzRequest) -> dict:
     try:
         state = store.update(
             payload.session_code,
-            lambda current: buzz(current, payload.team_name),
+            lambda current: buzz(current, payload.team_name, payload.student_name),
         )
     except KeyError as exc:
         raise not_found(payload.session_code) from exc

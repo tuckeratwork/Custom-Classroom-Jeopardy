@@ -27,7 +27,7 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
 
             join_response = await client.post(
                 "/api/join",
-                json={"session_code": code, "team_name": "Red Team"},
+                json={"session_code": code, "team_name": "Red Team", "student_name": "Alice"},
             )
             assert join_response.status_code == 200
 
@@ -45,10 +45,11 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
 
             buzz_response = await client.post(
                 "/api/buzz",
-                json={"session_code": code, "team_name": "Red Team"},
+                json={"session_code": code, "team_name": "Red Team", "student_name": "Alice"},
             )
             assert buzz_response.status_code == 200
             assert buzz_response.json()["buzz_winner"] == "Red Team"
+            assert buzz_response.json()["buzz_winner_student"] == "Alice"
 
             score_response = await client.post(
                 "/api/clue/score",
