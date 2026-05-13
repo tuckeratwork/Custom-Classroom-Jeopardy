@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Teacher Jeopardy Board</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body data-role="teacher">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Teacher console</p>
+        <h1 id="game-title">Classroom Jeopardy</h1>
+      </div>
+      <div class="session-pill">Code <strong id="session-code">-----</strong></div>
+    </header>
+
+    <main class="layout">
+      <section class="board-panel">
+        <div class="actions">
+          <button id="start-game">Start game</button>
+          <input id="config-path" value="games/example.yaml" aria-label="Game YAML path">
+          <button id="refresh-game" class="secondary">Refresh</button>
+        </div>
+        <div id="board" class="board" aria-live="polite"></div>
+      </section>
+
+      <aside class="control-panel">
+        <section>
+          <h2>Scores</h2>
+          <div id="scores" class="scores"></div>
+        </section>
+
+        <section>
+          <h2>Current clue</h2>
+          <div id="current-clue" class="current-clue muted">No clue selected.</div>
+          <div id="buzz-status" class="buzz-status"></div>
+          <div class="field-row">
+            <label for="score-team">Team</label>
+            <select id="score-team"></select>
+          </div>
+          <div id="daily-double-controls" class="field-row hidden">
+            <label for="wager">Wager</label>
+            <input id="wager" type="number" min="0" value="0">
+          </div>
+          <div class="button-row">
+            <button id="score-correct">Correct</button>
+            <button id="score-wrong" class="danger">Wrong</button>
+            <button id="reset-buzzer" class="secondary">Reset buzzers</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Final Jeopardy</h2>
+          <div id="final-card" class="final-card"></div>
+          <div id="final-wagers" class="final-wagers"></div>
+          <div class="button-row">
+            <button id="save-wagers" class="secondary">Save wagers</button>
+            <button id="reveal-final">Reveal final</button>
+            <button id="score-final" class="secondary">Score final</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/static/teacher.js"></script>
+  </body>
+</html>

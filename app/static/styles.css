@@ -1,0 +1,324 @@
+:root {
+  color-scheme: dark;
+  --bg: #10151c;
+  --panel: #17202b;
+  --panel-2: #202b38;
+  --text: #f5f7fb;
+  --muted: #a8b3c2;
+  --line: #334155;
+  --accent: #f2c94c;
+  --accent-2: #32d583;
+  --danger: #ff6b6b;
+  --blue: #2457c5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: #151515;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button.secondary {
+  background: #334155;
+  color: var(--text);
+}
+
+button.danger {
+  background: var(--danger);
+  color: #240606;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #0f1720;
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #0c1118;
+}
+
+.topbar h1,
+.student-shell h1 {
+  margin: 4px 0 0;
+  font-size: 28px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.session-pill {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.session-pill strong {
+  color: var(--text);
+  font-size: 22px;
+  letter-spacing: 2px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  padding: 20px;
+}
+
+.board-panel,
+.control-panel section,
+.join-card,
+.buzzer-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.board-panel {
+  padding: 16px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 360px) auto;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.board {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.category-header,
+.clue-button {
+  min-width: 140px;
+  min-height: 70px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.category-header {
+  padding: 10px;
+  background: #1b2f63;
+  color: #ffffff;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.clue-button {
+  width: 100%;
+  background: var(--blue);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.clue-button.revealed {
+  background: #111827;
+  color: #4b5563;
+}
+
+.clue-button.active {
+  outline: 3px solid var(--accent);
+}
+
+.control-panel {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.control-panel section {
+  padding: 16px;
+}
+
+.control-panel h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.scores {
+  display: grid;
+  gap: 8px;
+}
+
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #101822;
+}
+
+.score-row strong {
+  color: var(--accent-2);
+}
+
+.current-clue,
+.final-card,
+.student-clue {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #101822;
+  line-height: 1.45;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.buzz-status,
+.student-status {
+  min-height: 26px;
+  margin: 10px 0;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.field-row {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.final-wagers {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.final-wager-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.student-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.join-card,
+.buzzer-card {
+  width: min(100%, 460px);
+  padding: 20px;
+}
+
+.join-card label {
+  display: block;
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.join-card button {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.error-text {
+  min-height: 24px;
+  color: var(--danger);
+}
+
+.buzzer-card {
+  text-align: center;
+}
+
+.buzz-button {
+  width: min(100%, 320px);
+  height: 180px;
+  margin: 18px auto;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 44px;
+  letter-spacing: 0;
+  box-shadow: 0 14px 0 #8a1f2a;
+}
+
+.buzz-button:active {
+  transform: translateY(8px);
+  box-shadow: 0 6px 0 #8a1f2a;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}

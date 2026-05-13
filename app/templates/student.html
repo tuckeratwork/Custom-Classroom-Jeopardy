@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jeopardy Buzzer</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body data-role="student">
+    <main class="student-shell">
+      <section id="join-card" class="join-card">
+        <p class="eyebrow">Student buzzer</p>
+        <h1>Join the game</h1>
+        <label for="join-code">Session code</label>
+        <input id="join-code" autocomplete="off" maxlength="8">
+        <label for="team-name">Team name</label>
+        <input id="team-name" autocomplete="off">
+        <button id="join-game">Join</button>
+        <p id="join-error" class="error-text"></p>
+      </section>
+
+      <section id="buzzer-card" class="buzzer-card hidden">
+        <p class="eyebrow" id="student-session"></p>
+        <h1 id="student-team"></h1>
+        <div id="student-clue" class="student-clue">Waiting for the teacher.</div>
+        <button id="buzz-button" class="buzz-button">BUZZ</button>
+        <p id="student-status" class="student-status"></p>
+        <div id="student-scores" class="scores"></div>
+      </section>
+    </main>
+
+    <script src="/static/student.js"></script>
+  </body>
+</html>
