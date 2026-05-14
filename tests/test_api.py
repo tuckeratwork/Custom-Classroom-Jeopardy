@@ -80,3 +80,27 @@ def test_student_state_hides_answers(tmp_path, monkeypatch) -> None:
         assert "answer" in teacher_state["categories"][0]["clues"][0]
 
     asyncio.run(scenario())
+
+
+def test_reset_invalidates_previous_session(tmp_path, monkeypatch) -> None:
+    use_test_store(tmp_path, monkeypatch)
+
+    async def scenario() -> None:
+        transport = ASGITransport(app=main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            first = (
+                await client.post("/api/game/start", json={"config_path": "games/example.yaml"})
+            ).json()
+            old_code = first["session_code"]
+
+            reset_response = await client.post(
+                "/api/game/start",
+                json={"config_path": "games/example.yaml", "previous_session_code": old_code},
+            )
+            assert reset_response.status_code == 200
+            assert reset_response.json()["session_code"] != old_code
+
+            old_response = await client.get(f"/api/game/{old_code}")
+            assert old_response.status_code == 404
+
+    asyncio.run(scenario())

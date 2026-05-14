@@ -9,10 +9,14 @@ from fastapi.templating import Jinja2Templates
 
 from .game import (
     GameError,
+    advance_final_reveal,
+    advance_final_timers,
     buzz,
+    calculate_final_winners,
     create_game_state,
     join_team,
     load_game_config,
+    lock_daily_double_wager,
     public_state,
     reset_buzzer,
     reveal_final,
@@ -20,10 +24,15 @@ from .game import (
     score_final,
     select_clue,
     set_final_wagers,
+    submit_final_answer,
+    submit_final_wager,
 )
 from .models import (
     BuzzRequest,
+    DailyDoubleWagerRequest,
+    FinalAnswerRequest,
     FinalScoreRequest,
+    FinalWagerRequest,
     FinalWagersRequest,
     JoinRequest,
     ScoreClueRequest,
@@ -78,6 +87,11 @@ async def student_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("student.html", {"request": request})
 
 
+@app.get("/board", response_class=HTMLResponse)
+async def board_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("board.html", {"request": request})
+
+
 @app.get("/api/game/latest")
 async def latest_game() -> dict:
     state = store.latest()
@@ -97,12 +111,25 @@ async def get_game(session_code: str, teacher: bool = False) -> dict:
 
 @app.post("/api/game/start")
 async def start_game(payload: StartGameRequest) -> dict:
+    previous_session_code = payload.previous_session_code.upper() if payload.previous_session_code else None
+    if previous_session_code is None:
+        previous_state = store.latest()
+        previous_session_code = previous_state.session_code if previous_state else None
     try:
         config = load_game_config(payload.config_path)
         state = create_game_state(config)
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save(state)
+    if previous_session_code and previous_session_code != state.session_code:
+        await manager.broadcast(
+            previous_session_code,
+            {
+                "type": "session_reset",
+                "new_session_code": state.session_code,
+            },
+        )
+        store.delete(previous_session_code)
     await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
 
@@ -176,6 +203,25 @@ async def score_clue_route(payload: ScoreClueRequest) -> dict:
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/daily-double/wager")
+async def daily_double_wager_route(payload: DailyDoubleWagerRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: lock_daily_double_wager(
+                current,
+                payload.team_name,
+                payload.wager,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
 @app.post("/api/buzzer/reset")
 async def reset_buzzer_route(payload: SessionRequest) -> dict:
     try:
@@ -211,6 +257,46 @@ async def final_wagers_route(payload: FinalWagersRequest) -> dict:
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/final/wager")
+async def final_wager_route(payload: FinalWagerRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: submit_final_wager(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.wager,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state)
+
+
+@app.post("/api/final/answer")
+async def final_answer_route(payload: FinalAnswerRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: submit_final_answer(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.answer,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state)
+
+
 @app.post("/api/final/score")
 async def final_score_route(payload: FinalScoreRequest) -> dict:
     try:
@@ -218,6 +304,40 @@ async def final_score_route(payload: FinalScoreRequest) -> dict:
             payload.session_code,
             lambda current: score_final(current, payload.results),
         )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/final/calculate")
+async def final_calculate_route(payload: SessionRequest) -> dict:
+    try:
+        state = store.update(payload.session_code, calculate_final_winners)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/final/advance")
+async def final_advance_route(payload: SessionRequest) -> dict:
+    try:
+        state = store.update(payload.session_code, advance_final_timers)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/final/reveal-next")
+async def final_reveal_next_route(payload: SessionRequest) -> dict:
+    try:
+        state = store.update(payload.session_code, advance_final_reveal)
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
     except GameError as exc:

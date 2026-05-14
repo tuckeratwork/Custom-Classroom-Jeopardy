@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jeopardy Buzzer</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v=20260514-final8">
   </head>
   <body data-role="student">
     <main class="student-shell">
@@ -29,11 +29,15 @@
         <button id="buzz-button" class="buzz-button">BUZZ</button>
         <div id="buzz-timer" class="buzz-timer hidden">10</div>
         <p id="student-status" class="student-status"></p>
+        <section id="student-final" class="student-final hidden">
+          <div id="final-leaderboard" class="final-leaderboard"></div>
+          <div id="final-action" class="final-action"></div>
+        </section>
         <button id="change-game" class="secondary change-game">Change game</button>
         <div id="student-scores" class="scores"></div>
       </section>
     </main>
 
-    <script src="/static/student.js"></script>
+    <script src="/static/student.js?v=20260514-final8"></script>
   </body>
 </html>

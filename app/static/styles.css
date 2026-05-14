@@ -26,7 +26,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -57,7 +58,8 @@ button.danger {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line);
@@ -65,6 +67,27 @@ select {
   padding: 0 12px;
   background: #0f1720;
   color: var(--text);
+}
+
+textarea {
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.button-link {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.button-link.secondary {
+  background: #334155;
 }
 
 .topbar {
@@ -147,7 +170,7 @@ select {
 
 .actions {
   display: grid;
-  grid-template-columns: auto minmax(220px, 360px) auto;
+  grid-template-columns: auto minmax(220px, 360px) auto auto;
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -379,6 +402,42 @@ select {
   gap: 8px;
 }
 
+.final-submission {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #0f1720;
+}
+
+.final-phase,
+.final-countdown {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.student-final {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.final-leaderboard,
+.final-action {
+  display: grid;
+  gap: 8px;
+}
+
+.final-leaderboard-row {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #101822;
+}
+
 .hidden {
   display: none !important;
 }
@@ -413,6 +472,15 @@ select {
   color: var(--danger);
 }
 
+.notice-text {
+  border: 1px solid rgba(242, 201, 76, 0.45);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(242, 201, 76, 0.1);
+  color: var(--accent);
+  font-weight: 800;
+}
+
 .buzzer-card {
   text-align: center;
 }
@@ -439,12 +507,207 @@ select {
   margin: 0 auto 14px;
 }
 
+.presentation-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 24px;
+  padding: 24px;
+}
+
+.presentation-scoreboard,
+.presentation-clue-card,
+.winner-reveal {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 22px;
+}
+
+.presentation-scoreboard h1 {
+  margin: 4px 0 18px;
+}
+
+.presentation-scores {
+  display: grid;
+  gap: 12px;
+}
+
+.presentation-score-row,
+.winner-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #101822;
+}
+
+.presentation-score-row span {
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.presentation-score-row em,
+.winner-row strong {
+  color: var(--accent-2);
+  font-style: normal;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.presentation-clue {
+  display: grid;
+  gap: 20px;
+}
+
+.presentation-board {
+  display: grid;
+  gap: 8px;
+}
+
+.presentation-category,
+.presentation-tile {
+  min-height: 64px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.presentation-category {
+  padding: 8px;
+  background: #1b2f63;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.presentation-tile {
+  background: var(--blue);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 900;
+  transform-style: preserve-3d;
+  transition: transform 220ms ease, opacity 220ms ease, background 220ms ease;
+}
+
+.presentation-tile.active {
+  transform: rotateY(180deg) scale(1.04);
+  outline: 3px solid var(--accent);
+}
+
+.presentation-tile.revealed,
+.presentation-tile-empty {
+  background: #111827;
+  color: #4b5563;
+}
+
+.presentation-clue-card {
+  min-height: 360px;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96) rotateX(-8deg);
+  transition: opacity 260ms ease, transform 320ms ease;
+}
+
+.presentation-clue-card-open {
+  opacity: 1;
+  transform: translateY(0) scale(1) rotateX(0);
+}
+
+.presentation-clue-card h2 {
+  margin: 0;
+  font-size: 42px;
+}
+
+.presentation-answer {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  color: var(--accent-2);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.winner-reveal {
+  grid-column: 1 / -1;
+}
+
+#winner-stage {
+  display: grid;
+  gap: 12px;
+}
+
+.final-reveal-stage {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.winner-row {
+  grid-template-columns: 1fr auto;
+  font-size: 28px;
+}
+
+.winner-row small {
+  grid-column: 1 / -1;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.winner-row-champion {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(242, 201, 76, 0.2);
+}
+
+.winner-row-pending strong {
+  color: var(--accent);
+  min-width: 96px;
+  text-align: right;
+}
+
+.winner-row-revealing {
+  border-color: rgba(242, 201, 76, 0.7);
+}
+
+.winner-name-hidden {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.confetti-piece {
+  position: fixed;
+  top: -20px;
+  width: 10px;
+  height: 16px;
+  z-index: 50;
+  animation: confetti-fall 2.4s ease-in forwards;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;
   }
 
   .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .presentation-shell {
     grid-template-columns: 1fr;
   }
 }

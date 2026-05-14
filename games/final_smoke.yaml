@@ -1,0 +1,17 @@
+title: Final Jeopardy Smoke Test
+teams:
+  - Red Team
+  - Blue Team
+categories:
+  - name: Quick Test
+    clues:
+      - value: 100
+        prompt: This is the first quick board clue.
+        answer: Smoke test
+      - value: 200
+        prompt: This is the second quick board clue. Score both clues to move into Final Jeopardy.
+        answer: Final setup
+final:
+  category: Test Finals
+  prompt: This final prompt is used to test wagering, answer submission, review, and winner reveal.
+  answer: Final smoke test

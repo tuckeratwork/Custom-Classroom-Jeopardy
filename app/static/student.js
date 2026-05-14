@@ -11,8 +11,41 @@ let timerInterval = null;
 let expiredTimerSignature = null;
 let lastScoreEventId = null;
 let hasSeenScoreState = false;
+let finalAdvanceInFlight = false;
+let finalRevealSignature = null;
+let finalActionKey = null;
 
 const $ = (id) => document.getElementById(id);
+
+const audioFiles = {
+  music: new Audio("/static/audio/question_loop.wav"),
+  suspense: new Audio("/static/audio/suspense_reveal.wav"),
+  results: new Audio("/static/audio/results_ceremony.wav"),
+};
+audioFiles.music.loop = true;
+audioFiles.results.loop = true;
+audioFiles.music.volume = 0.22;
+audioFiles.suspense.volume = 0.55;
+audioFiles.results.volume = 0.36;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function countdownText(expiresAt) {
+  if (!expiresAt) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.ceil(expiresAt - Date.now() / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
 
 function getAudioContext() {
   if (!audioContext) {
@@ -41,7 +74,12 @@ function playTone(frequency, duration, type = "sine", volume = 0.05, offset = 0)
 }
 
 function startMusic() {
-  if (musicMuted || musicTimer) {
+  if (musicMuted) {
+    return;
+  }
+  audioFiles.music.play().catch(() => {});
+  return;
+  if (musicTimer) {
     return;
   }
   const notes = [196, 247, 294, 330, 294, 247];
@@ -65,7 +103,42 @@ function playWrongCue() {
   [220, 165, 110].forEach((frequency, index) => playTone(frequency, 0.18, "sawtooth", 0.07, index * 0.12));
 }
 
+function drumroll(duration = 1200) {
+  audioFiles.suspense.currentTime = 0;
+  audioFiles.suspense.play().catch(() => {});
+  return;
+  const startedAt = Date.now();
+  const interval = window.setInterval(() => {
+    playTone(90 + Math.random() * 35, 0.045, "square", 0.045);
+    if (Date.now() - startedAt >= duration) {
+      window.clearInterval(interval);
+    }
+  }, 75);
+}
+
+function startResultsMusic() {
+  if (musicMuted) {
+    return;
+  }
+  audioFiles.results.play().catch(() => {});
+}
+
+function stopResultsMusic() {
+  audioFiles.results.pause();
+}
+
+function ordinal(value) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  const mod10 = value % 10;
+  if (mod10 === 1) return `${value}st`;
+  if (mod10 === 2) return `${value}nd`;
+  if (mod10 === 3) return `${value}rd`;
+  return `${value}th`;
+}
+
 function stopMusic() {
+  audioFiles.music.pause();
   if (musicTimer) {
     window.clearInterval(musicTimer);
     musicTimer = null;
@@ -93,6 +166,16 @@ function showJoin() {
   $("student-name").value = studentName;
 }
 
+function handleSessionReset(newCode) {
+  sessionCode = newCode || "";
+  localStorage.removeItem("jeopardy_session");
+  $("join-code").value = sessionCode;
+  $("join-error").textContent = sessionCode
+    ? "The game was reset. Join with the new code."
+    : "The game was reset. Enter the new session code.";
+  showJoin();
+}
+
 function connectSocket() {
   if (socket) {
     socket.close();
@@ -104,6 +187,8 @@ function connectSocket() {
     if (message.type === "state") {
       state = message.state;
       render();
+    } else if (message.type === "session_reset") {
+      handleSessionReset(message.new_session_code);
     }
   };
 }
@@ -126,6 +211,11 @@ function myTeam() {
   return state?.teams?.find((team) => team.name === teamName) || null;
 }
 
+function finalWagerLimit() {
+  const score = myTeam()?.score || 0;
+  return score >= 500 ? score : 500;
+}
+
 function canBuzz(clue) {
   if (!clue || clue.is_daily_double || state.buzz_winner) {
     return false;
@@ -140,10 +230,11 @@ function canBuzz(clue) {
 }
 
 function timerRemaining() {
-  if (!state.buzz_expires_at) {
+  const expiresAt = state.buzz_expires_at || state.daily_double?.answer_expires_at;
+  if (!expiresAt) {
     return null;
   }
-  return Math.max(0, Math.ceil(state.buzz_expires_at - Date.now() / 1000));
+  return Math.max(0, Math.ceil(expiresAt - Date.now() / 1000));
 }
 
 function renderTimer() {
@@ -152,7 +243,7 @@ function renderTimer() {
   }
   const timer = $("buzz-timer");
   const remaining = timerRemaining();
-  if (remaining === null || !state.buzz_winner) {
+  if (remaining === null || (!state.buzz_winner && !state.daily_double?.question_revealed)) {
     timer.classList.add("hidden");
     timer.textContent = "10";
     return;
@@ -162,7 +253,7 @@ function renderTimer() {
   timer.classList.toggle("buzz-timer-expired", remaining <= 0);
   timer.textContent = String(remaining);
 
-  const signature = `${state.buzz_winner}:${state.buzz_winner_student || ""}:${state.buzz_expires_at}`;
+  const signature = `${state.buzz_winner || state.daily_double?.team_name}:${state.buzz_winner_student || "daily-double"}:${state.buzz_expires_at || state.daily_double?.answer_expires_at}`;
   if (remaining <= 0 && expiredTimerSignature !== signature) {
     expiredTimerSignature = signature;
     playTimerExpiredCue();
@@ -199,22 +290,259 @@ function renderScoreEvent() {
   }
 }
 
+function renderFinalLeaderboard() {
+  const board = $("final-leaderboard");
+  const teams = [...state.teams].sort((left, right) => displayScore(right) - displayScore(left));
+  board.innerHTML = teams.map((team, index) => `
+    <div class="final-leaderboard-row">
+      <span>${index + 1}. ${escapeHtml(team.name)}</span>
+      <strong>$${displayScore(team)}</strong>
+    </div>
+  `).join("");
+}
+
+function renderFinalAction() {
+  const action = $("final-action");
+  const previousWager = $("final-wager-input")?.value;
+  const previousAnswer = $("final-answer-input")?.value;
+  const previousError = $("final-submit-error")?.textContent || "";
+  const phase = state.final.phase;
+  const leader = state.final.leaders[teamName];
+  const isLeader = leader === studentName;
+  const teamScore = myTeam()?.score || 0;
+  const maxWager = finalWagerLimit();
+  const locked = state.final.wagers[teamName] !== undefined;
+  const submitted = state.final.submissions[teamName] !== undefined;
+  const renderKey = `${phase}:${leader || ""}:${isLeader}:${locked}:${submitted}:${teamScore}:${state.final.reveal_step || 0}:${state.final.reveal_spinning_index ?? null}`;
+  if (finalActionKey === renderKey && (phase === "wager" || phase === "answer")) {
+    return;
+  }
+  finalActionKey = renderKey;
+
+  if (phase === "wager") {
+    action.innerHTML = `
+      <h2>Final Jeopardy</h2>
+      <p class="muted">Team leader: ${escapeHtml(leader || "Waiting for leader")}</p>
+      <p id="student-final-countdown" class="final-countdown">${countdownText(state.final.wager_expires_at)}</p>
+      ${teamScore < 500 ? `<p class="notice-text">Your team has less than $500, so you may wager up to $500.</p>` : ""}
+      <p id="final-submit-error" class="error-text"></p>
+      ${isLeader && !locked ? `
+        <label for="final-wager-input">Wager</label>
+        <input id="final-wager-input" type="number" min="0" max="${maxWager}" value="${maxWager}" inputmode="numeric">
+        <button id="submit-final-wager">Lock wager</button>
+      ` : `<p>${locked ? "Your team's wager is locked." : `Only ${escapeHtml(leader || "your team leader")} can lock the wager.`}</p>`}
+    `;
+    if (previousWager !== undefined && $("final-wager-input")) {
+      $("final-wager-input").value = previousWager;
+    }
+    if (previousError) {
+      $("final-submit-error").textContent = previousError;
+    }
+    $("submit-final-wager")?.addEventListener("click", submitFinalWager);
+    return;
+  }
+
+  if (phase === "answer") {
+    action.innerHTML = `
+      <h2>${escapeHtml(state.final.category)}</h2>
+      <p id="student-final-countdown" class="final-countdown">${countdownText(state.final.answer_expires_at)}</p>
+      <div class="student-clue">${escapeHtml(state.final.prompt)}</div>
+      <p class="muted">Team leader: ${escapeHtml(leader || "Waiting for leader")}</p>
+      <p id="final-submit-error" class="error-text"></p>
+      ${isLeader && !submitted ? `
+        <label for="final-answer-input">Final answer</label>
+        <textarea id="final-answer-input" rows="4"></textarea>
+        <button id="submit-final-answer">Submit answer</button>
+      ` : `<p>${submitted ? "Your team's answer is submitted." : `Only ${escapeHtml(leader || "your team leader")} can submit the answer.`}</p>`}
+    `;
+    if (previousAnswer !== undefined && $("final-answer-input")) {
+      $("final-answer-input").value = previousAnswer;
+    }
+    if (previousError) {
+      $("final-submit-error").textContent = previousError;
+    }
+    $("submit-final-answer")?.addEventListener("click", submitFinalAnswer);
+    return;
+  }
+
+  if (phase === "review") {
+    action.innerHTML = `
+      <h2>Answers submitted</h2>
+      <p>The teacher is reviewing Final Jeopardy.</p>
+    `;
+    return;
+  }
+
+  if (phase === "complete") {
+    action.innerHTML = `
+      <h2>Final Results</h2>
+      <div id="student-winner-stage" class="final-reveal-stage"></div>
+    `;
+    runFinalReveal("student-winner-stage");
+    return;
+  }
+
+  action.innerHTML = "";
+}
+
+function updateFinalCountdown() {
+  const countdown = $("student-final-countdown");
+  if (!countdown || !state) {
+    return;
+  }
+  if (state.final.phase === "wager") {
+    countdown.textContent = countdownText(state.final.wager_expires_at);
+  } else if (state.final.phase === "answer") {
+    countdown.textContent = countdownText(state.final.answer_expires_at);
+  }
+}
+
+function runFinalReveal(stageId) {
+  const order = state.final.reveal_order || [];
+  const revealStep = state.final.reveal_step || 0;
+  const spinningIndex = state.final.reveal_spinning_index ?? null;
+  const signature = `${stageId}:${order.join("|")}:${JSON.stringify(state.final.final_scores || {})}:${revealStep}:${spinningIndex}`;
+  if (finalRevealSignature === signature) {
+    return;
+  }
+  finalRevealSignature = signature;
+  const stage = $(stageId);
+  stage.innerHTML = "";
+  const teams = order.map((name) => state.teams.find((team) => team.name === name)).filter(Boolean);
+  if (revealStep === 0 && spinningIndex === null) {
+    stage.innerHTML = `
+      <div class="winner-row winner-row-pending">
+        <small>Final results ready</small>
+        <span>Waiting for the next reveal</span>
+        <strong>$----</strong>
+      </div>
+    `;
+    return;
+  }
+  teams.forEach((team, index) => {
+    if (index >= revealStep && index !== spinningIndex) {
+      return;
+    }
+    const place = teams.length - index;
+    const shouldSpin = index === spinningIndex;
+    const finalScore = finalScoreFor(team);
+    const row = document.createElement("div");
+    row.className = `winner-row ${index === teams.length - 1 ? "winner-row-champion" : ""}`;
+    if (!shouldSpin) {
+      row.innerHTML = `<small>In ${ordinal(place)} place we have:</small><span>${escapeHtml(team.name)}</span><strong>$${finalScore}</strong>`;
+      stage.appendChild(row);
+      return;
+    }
+    row.classList.add("winner-row-revealing");
+    row.innerHTML = `<small>In ${ordinal(place)} place we have:</small><span class="winner-name-hidden">????</span><strong data-slot-machine="true">$0000</strong>`;
+    stage.appendChild(row);
+    startSlotSpin(row.querySelector("[data-slot-machine]"));
+  });
+}
+
+function startSlotSpin(target, onDone) {
+  if (!target) return;
+  let ticks = 0;
+  const interval = window.setInterval(() => {
+    if (!document.body.contains(target)) {
+      window.clearInterval(interval);
+      return;
+    }
+    ticks += 1;
+    target.textContent = `$${Math.floor(Math.random() * 9999)}`;
+    if (onDone && ticks > 22) {
+      window.clearInterval(interval);
+      onDone?.();
+    }
+  }, 70);
+}
+
+function finalScoreFor(team) {
+  return state.final?.final_scores?.[team.name] ?? team.score;
+}
+
+function displayScore(team) {
+  return team.score;
+}
+
+function renderFinalMode() {
+  const inFinal = state.phase.startsWith("final") || state.phase === "complete";
+  $("student-final").classList.toggle("hidden", !inFinal);
+  $("buzz-button").classList.toggle("hidden", inFinal);
+  if (!inFinal) {
+    finalActionKey = null;
+    return;
+  }
+  stopMusic();
+  const finalOrder = state.final?.reveal_order || [];
+  const finalInProgress = state.final?.phase === "complete"
+    && state.final?.results_revealed
+    && ((state.final.reveal_step || 0) < finalOrder.length || (state.final.reveal_spinning_index ?? null) !== null);
+  if (finalInProgress) {
+    startResultsMusic();
+  } else {
+    stopResultsMusic();
+  }
+  renderFinalLeaderboard();
+  renderFinalAction();
+}
+
+async function advanceFinalIfExpired() {
+  if (!state || finalAdvanceInFlight) {
+    return;
+  }
+  const phase = state.final.phase;
+  const expiresAt = phase === "wager"
+    ? state.final.wager_expires_at
+    : phase === "answer"
+      ? state.final.answer_expires_at
+      : null;
+  if (!expiresAt || Date.now() / 1000 < expiresAt) {
+    return;
+  }
+  finalAdvanceInFlight = true;
+  try {
+    const response = await fetch("/api/final/advance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_code: sessionCode }),
+    });
+    if (response.ok) {
+      state = await response.json();
+      render();
+    }
+  } finally {
+    finalAdvanceInFlight = false;
+  }
+}
+
 function render() {
   if (!state) {
     return;
   }
   const clue = currentClue();
   const button = $("buzz-button");
-  if (!clue) {
+  const inFinal = state.phase.startsWith("final") || state.phase === "complete";
+  if (inFinal) {
+    $("student-clue").textContent = "Final Jeopardy";
+    button.disabled = true;
+  } else if (!clue) {
     $("student-clue").textContent = state.phase === "final"
       ? `${state.final.category}: ${state.final.revealed ? state.final.prompt : "Waiting for Final Jeopardy."}`
       : "Waiting for the teacher to select a clue.";
     button.disabled = true;
     stopMusic();
   } else if (clue.is_daily_double) {
-    $("student-clue").textContent = "Daily Double. The teacher will manage the wager.";
+    const isDailyDoubleTeam = state.daily_double.team_name === teamName;
+    $("student-clue").textContent = state.daily_double.question_revealed && isDailyDoubleTeam
+      ? clue.prompt
+      : "Daily Double. The teacher will manage the wager.";
     button.disabled = true;
-    startMusic();
+    if (state.daily_double.question_revealed) {
+      stopMusic();
+    } else {
+      startMusic();
+    }
   } else {
     $("student-clue").textContent = clue.prompt;
     button.disabled = !canBuzz(clue);
@@ -242,17 +570,84 @@ function render() {
   const scores = $("student-scores");
   scores.innerHTML = "";
   state.teams.forEach((team) => {
+    const score = displayScore(team);
     const row = document.createElement("div");
     row.className = "score-row";
-    if (team.score < 0) {
+    if (score < 0) {
       row.classList.add("score-negative");
     }
-    row.innerHTML = `<span>${team.name}</span><strong>$${team.score}</strong>`;
+    row.innerHTML = `<span>${team.name}</span><strong>$${score}</strong>`;
     scores.appendChild(row);
   });
 
   renderTimer();
   renderScoreEvent();
+  renderFinalMode();
+}
+
+async function submitFinalWager() {
+  const input = $("final-wager-input");
+  const error = $("final-submit-error");
+  const wager = Number(input.value || 0);
+  const maxWager = finalWagerLimit();
+  if (!Number.isInteger(wager) || wager < 0 || wager > maxWager) {
+    error.textContent = `Enter a whole dollar amount from $0 to $${maxWager}.`;
+    input.focus();
+    return;
+  }
+  if (!window.confirm(`Lock $${wager} as your team's Final Jeopardy wager?`)) {
+    return;
+  }
+  const response = await fetch("/api/final/wager", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      wager,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    error.textContent = data.detail || "Unable to submit wager.";
+    input.focus();
+    return;
+  }
+  state = data;
+  render();
+}
+
+async function submitFinalAnswer() {
+  const input = $("final-answer-input");
+  const error = $("final-submit-error");
+  const answer = input.value.trim();
+  if (!answer) {
+    error.textContent = "Enter an answer before submitting.";
+    input.focus();
+    return;
+  }
+  if (!window.confirm("Submit this as your team's final answer?")) {
+    return;
+  }
+  const response = await fetch("/api/final/answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      answer,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    error.textContent = data.detail || "Unable to submit answer.";
+    input.focus();
+    return;
+  }
+  state = data;
+  render();
 }
 
 $("join-code").value = sessionCode;
@@ -320,5 +715,11 @@ $("mute-music").addEventListener("change", (event) => {
 });
 
 if (!timerInterval) {
-  timerInterval = window.setInterval(renderTimer, 250);
+  timerInterval = window.setInterval(() => {
+    renderTimer();
+    if (state?.phase?.startsWith("final")) {
+      updateFinalCountdown();
+      advanceFinalIfExpired();
+    }
+  }, 250);
 }

@@ -11,8 +11,30 @@ let timerInterval = null;
 let expiredTimerSignature = null;
 let lastScoreEventId = null;
 let hasSeenScoreState = false;
+let finalAdvanceInFlight = false;
+let finalRevealSignature = null;
 
 const $ = (id) => document.getElementById(id);
+
+const audioFiles = {
+  music: new Audio("/static/audio/question_loop.wav"),
+  suspense: new Audio("/static/audio/suspense_reveal.wav"),
+  results: new Audio("/static/audio/results_ceremony.wav"),
+};
+audioFiles.music.loop = true;
+audioFiles.results.loop = true;
+audioFiles.music.volume = 0.24;
+audioFiles.suspense.volume = 0.6;
+audioFiles.results.volume = 0.38;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 function getAudioContext() {
   if (!audioContext) {
@@ -53,8 +75,47 @@ function playWrongCue() {
   [220, 165, 110].forEach((frequency, index) => playTone(frequency, 0.18, "sawtooth", 0.09, index * 0.12));
 }
 
+function drumroll(duration = 1200) {
+  audioFiles.suspense.currentTime = 0;
+  audioFiles.suspense.play().catch(() => {});
+  return;
+  const startedAt = Date.now();
+  const interval = window.setInterval(() => {
+    playTone(90 + Math.random() * 35, 0.045, "square", 0.055);
+    if (Date.now() - startedAt >= duration) {
+      window.clearInterval(interval);
+    }
+  }, 75);
+}
+
+function startResultsMusic() {
+  if (musicMuted) {
+    return;
+  }
+  audioFiles.results.play().catch(() => {});
+}
+
+function stopResultsMusic() {
+  audioFiles.results.pause();
+}
+
+function ordinal(value) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  const mod10 = value % 10;
+  if (mod10 === 1) return `${value}st`;
+  if (mod10 === 2) return `${value}nd`;
+  if (mod10 === 3) return `${value}rd`;
+  return `${value}th`;
+}
+
 function startMusic() {
-  if (musicMuted || musicTimer) {
+  if (musicMuted) {
+    return;
+  }
+  audioFiles.music.play().catch(() => {});
+  return;
+  if (musicTimer) {
     return;
   }
   const notes = [196, 247, 294, 330, 294, 247];
@@ -71,6 +132,7 @@ function playTimerExpiredCue() {
 }
 
 function stopMusic() {
+  audioFiles.music.pause();
   if (musicTimer) {
     window.clearInterval(musicTimer);
     musicTimer = null;
@@ -171,19 +233,20 @@ function renderScores() {
   select.innerHTML = "";
 
   state.teams.forEach((team) => {
+    const score = displayScore(team);
     const row = document.createElement("div");
     row.className = "score-row";
-    if (team.score < 0) {
+    if (score < 0) {
       row.classList.add("score-negative");
     }
     const previousScore = lastScores?.[team.name] ?? 0;
-    const delta = team.score - previousScore;
+    const delta = score - previousScore;
     if (lastScores && delta < 0) {
       row.classList.add("score-loss");
     }
     const students = team.students?.length ? ` (${team.students.length} students)` : "";
     const deltaLabel = lastScores && delta < 0 ? `<em class="score-delta">-$${Math.abs(delta)}</em>` : "";
-    row.innerHTML = `<span>${team.name}${team.joined ? students : " (not joined)"}</span><span class="score-total">${deltaLabel}<strong>$${team.score}</strong></span>`;
+    row.innerHTML = `<span>${team.name}${team.joined ? students : " (not joined)"}</span><span class="score-total">${deltaLabel}<strong>$${score}</strong></span>`;
     scores.appendChild(row);
 
     const option = document.createElement("option");
@@ -198,7 +261,7 @@ function renderScores() {
     select.value = previous;
   }
 
-  lastScores = Object.fromEntries(state.teams.map((team) => [team.name, team.score]));
+  lastScores = Object.fromEntries(state.teams.map((team) => [team.name, displayScore(team)]));
 }
 
 function showScorePopup(event) {
@@ -268,10 +331,11 @@ function renderControls() {
 }
 
 function timerRemaining() {
-  if (!state.buzz_expires_at) {
+  const expiresAt = state.buzz_expires_at || state.daily_double?.answer_expires_at;
+  if (!expiresAt) {
     return null;
   }
-  return Math.max(0, Math.ceil(state.buzz_expires_at - Date.now() / 1000));
+  return Math.max(0, Math.ceil(expiresAt - Date.now() / 1000));
 }
 
 function renderTimer() {
@@ -280,7 +344,7 @@ function renderTimer() {
   }
   const timer = $("buzz-timer");
   const remaining = timerRemaining();
-  if (remaining === null || !state.buzz_winner) {
+  if (remaining === null || (!state.buzz_winner && !state.daily_double?.question_revealed)) {
     timer.classList.add("hidden");
     timer.textContent = "10";
     return;
@@ -290,7 +354,7 @@ function renderTimer() {
   timer.classList.toggle("buzz-timer-expired", remaining <= 0);
   timer.textContent = String(remaining);
 
-  const signature = `${state.buzz_winner}:${state.buzz_winner_student || ""}:${state.buzz_expires_at}`;
+  const signature = `${state.buzz_winner || state.daily_double?.team_name}:${state.buzz_winner_student || "daily-double"}:${state.buzz_expires_at || state.daily_double?.answer_expires_at}`;
   if (remaining <= 0 && expiredTimerSignature !== signature) {
     expiredTimerSignature = signature;
     playTimerExpiredCue();
@@ -298,12 +362,23 @@ function renderTimer() {
 }
 
 function handleAudioState() {
+  const finalOrder = state.final?.reveal_order || [];
+  const finalInProgress = state.final?.phase === "complete"
+    && state.final?.results_revealed
+    && ((state.final.reveal_step || 0) < finalOrder.length || (state.final.reveal_spinning_index ?? null) !== null);
+  if (finalInProgress) {
+    stopMusic();
+    startResultsMusic();
+  } else {
+    stopResultsMusic();
+  }
+
   const clueId = state.current_clue_id;
   const buzzSignature = state.buzz_winner
     ? `${state.buzz_winner}:${state.buzz_winner_student || ""}`
     : null;
 
-  if (state.buzz_winner || !clueId) {
+  if (finalInProgress || state.buzz_winner || state.daily_double?.question_revealed || !clueId) {
     stopMusic();
   } else if (!musicTimer) {
     startMusic();
@@ -321,12 +396,70 @@ function startTimerLoop() {
   if (timerInterval) {
     return;
   }
-  timerInterval = window.setInterval(renderTimer, 250);
+  timerInterval = window.setInterval(() => {
+    renderTimer();
+    if (state?.final?.phase === "wager" || state?.final?.phase === "answer") {
+      updateFinalCountdown();
+      advanceFinalIfExpired();
+    }
+  }, 250);
+}
+
+async function advanceFinalIfExpired() {
+  if (!state || finalAdvanceInFlight) {
+    return;
+  }
+  const phase = state.final.phase;
+  const expiresAt = phase === "wager"
+    ? state.final.wager_expires_at
+    : phase === "answer"
+      ? state.final.answer_expires_at
+      : null;
+  if (!expiresAt || Date.now() / 1000 < expiresAt) {
+    return;
+  }
+  finalAdvanceInFlight = true;
+  try {
+    const data = await api("/api/final/advance", { session_code: sessionCode() });
+    state = data.state || data;
+  } finally {
+    finalAdvanceInFlight = false;
+  }
 }
 
 function renderFinal() {
   const finalCard = $("final-card");
-  finalCard.innerHTML = `<strong>${state.final.category}</strong><br>${state.final.revealed ? state.final.prompt : "Final prompt hidden."}<hr><span class="muted">Answer: ${state.final.answer || ""}</span>`;
+  const phase = state.final.phase || "pending";
+  const finalTimer = phase === "wager"
+    ? countdownText(state.final.wager_expires_at)
+    : phase === "answer"
+      ? countdownText(state.final.answer_expires_at)
+      : "";
+  finalCard.innerHTML = `
+    <strong>${escapeHtml(state.final.category)}</strong>
+    <span id="teacher-final-phase" class="final-phase">${escapeHtml(phase.replace("_", " "))}${finalTimer ? ` · ${finalTimer}` : ""}</span><br>
+    ${state.final.revealed ? escapeHtml(state.final.prompt) : "Final prompt hidden."}
+    <hr><span class="muted">Answer: ${escapeHtml(state.final.answer || "")}</span>
+    ${phase === "complete" ? `<div id="teacher-winner-stage" class="final-reveal-stage"></div>` : ""}
+  `;
+  if (phase === "complete") {
+    runFinalReveal("teacher-winner-stage");
+    const nextButton = $("next-final-reveal");
+    if (nextButton) {
+      const orderLength = state.final.reveal_order?.length || 0;
+      const spinningIndex = state.final.reveal_spinning_index ?? null;
+      nextButton.textContent = spinningIndex === null
+        ? ((state.final.reveal_step || 0) >= orderLength ? "Reveal Complete" : "Start Next Reveal")
+        : "Land Current Place";
+      nextButton.disabled = spinningIndex === null && (state.final.reveal_step || 0) >= orderLength;
+    }
+  } else {
+    const nextButton = $("next-final-reveal");
+    if (nextButton) {
+      nextButton.textContent = "Reveal Next Place";
+      nextButton.disabled = false;
+    }
+  }
 
   const wagers = $("final-wagers");
   wagers.innerHTML = "";
@@ -335,13 +468,108 @@ function renderFinal() {
     row.className = "final-wager-row";
     const wager = state.final.wagers[team.name] ?? 0;
     const scored = state.final.scored[team.name];
+    const leader = state.final.leaders[team.name] || "No leader yet";
+    const submitted = state.final.submissions[team.name] ?? "";
     row.innerHTML = `
-      <span>${team.name}</span>
+      <span><strong>${escapeHtml(team.name)}</strong><br><small>Leader: ${escapeHtml(leader)}</small></span>
       <input data-wager-team="${team.name}" type="number" min="0" value="${wager}">
       <label><input data-final-team="${team.name}" type="checkbox" ${scored === true ? "checked" : ""}> Correct</label>
+      <div class="final-submission">${submitted ? escapeHtml(submitted) : "<span class=\"muted\">No answer submitted</span>"}</div>
     `;
     wagers.appendChild(row);
   });
+}
+
+function updateFinalCountdown() {
+  const phase = state?.final?.phase;
+  const label = $("teacher-final-phase");
+  if (!phase || !label) {
+    return;
+  }
+  const finalTimer = phase === "wager"
+    ? countdownText(state.final.wager_expires_at)
+    : phase === "answer"
+      ? countdownText(state.final.answer_expires_at)
+      : "";
+  label.textContent = `${phase.replace("_", " ")}${finalTimer ? ` · ${finalTimer}` : ""}`;
+}
+
+function runFinalReveal(stageId) {
+  const order = state.final.reveal_order || [];
+  const revealStep = state.final.reveal_step || 0;
+  const spinningIndex = state.final.reveal_spinning_index ?? null;
+  const signature = `${stageId}:${order.join("|")}:${JSON.stringify(state.final.final_scores || {})}:${revealStep}:${spinningIndex}`;
+  if (finalRevealSignature === signature) {
+    return;
+  }
+  finalRevealSignature = signature;
+  const stage = $(stageId);
+  stage.innerHTML = "";
+  const teams = order.map((name) => state.teams.find((team) => team.name === name)).filter(Boolean);
+  if (revealStep === 0 && spinningIndex === null) {
+    stage.innerHTML = `
+      <div class="winner-row winner-row-pending">
+        <small>Final results ready</small>
+        <span>Reveal the next place</span>
+        <strong>$----</strong>
+      </div>
+    `;
+    return;
+  }
+  teams.forEach((team, index) => {
+    if (index >= revealStep && index !== spinningIndex) {
+      return;
+    }
+    const place = teams.length - index;
+    const shouldSpin = index === spinningIndex;
+    const finalScore = finalScoreFor(team);
+    const row = document.createElement("div");
+    row.className = `winner-row ${index === teams.length - 1 ? "winner-row-champion" : ""}`;
+    if (!shouldSpin) {
+      row.innerHTML = `<small>In ${ordinal(place)} place we have:</small><span>${escapeHtml(team.name)}</span><strong>$${finalScore}</strong>`;
+      stage.appendChild(row);
+      return;
+    }
+    row.classList.add("winner-row-revealing");
+    row.innerHTML = `<small>In ${ordinal(place)} place we have:</small><span class="winner-name-hidden">????</span><strong data-slot-machine="true">$0000</strong>`;
+    stage.appendChild(row);
+    startSlotSpin(row.querySelector("[data-slot-machine]"));
+  });
+}
+
+function startSlotSpin(target, onDone) {
+  if (!target) return;
+  let ticks = 0;
+  const interval = window.setInterval(() => {
+    if (!document.body.contains(target)) {
+      window.clearInterval(interval);
+      return;
+    }
+    ticks += 1;
+    target.textContent = `$${Math.floor(Math.random() * 9999)}`;
+    if (onDone && ticks > 22) {
+      window.clearInterval(interval);
+      onDone?.();
+    }
+  }, 70);
+}
+
+function finalScoreFor(team) {
+  return state.final?.final_scores?.[team.name] ?? team.score;
+}
+
+function displayScore(team) {
+  return team.score;
+}
+
+function countdownText(expiresAt) {
+  if (!expiresAt) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.ceil(expiresAt - Date.now() / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
 }
 
 async function selectClue(clueId) {
@@ -361,7 +589,10 @@ $("start-game").addEventListener("click", async () => {
   if (!window.confirm(message)) {
     return;
   }
-  const data = await api("/api/game/start", { config_path: $("config-path").value });
+  const data = await api("/api/game/start", {
+    config_path: $("config-path").value,
+    previous_session_code: code && code !== "-----" ? code : null,
+  });
   connectSocket(data.session_code);
 });
 
@@ -402,6 +633,14 @@ $("reset-buzzer").addEventListener("click", () => {
   api("/api/buzzer/reset", { session_code: sessionCode() });
 });
 
+$("lock-daily-double").addEventListener("click", () => {
+  api("/api/daily-double/wager", {
+    session_code: sessionCode(),
+    team_name: $("score-team").value,
+    wager: Number($("wager").value || 0),
+  });
+});
+
 $("save-wagers").addEventListener("click", () => {
   const wagers = {};
   document.querySelectorAll("[data-wager-team]").forEach((input) => {
@@ -414,12 +653,17 @@ $("reveal-final").addEventListener("click", () => {
   api("/api/final/reveal", { session_code: sessionCode() });
 });
 
-$("score-final").addEventListener("click", () => {
+$("calculate-winners").addEventListener("click", () => {
   const results = {};
   document.querySelectorAll("[data-final-team]").forEach((input) => {
     results[input.dataset.finalTeam] = input.checked;
   });
-  api("/api/final/score", { session_code: sessionCode(), results });
+  api("/api/final/score", { session_code: sessionCode(), results })
+    .then(() => api("/api/final/calculate", { session_code: sessionCode() }));
+});
+
+$("next-final-reveal").addEventListener("click", () => {
+  api("/api/final/reveal-next", { session_code: sessionCode() });
 });
 
 fetch("/api/game/latest")

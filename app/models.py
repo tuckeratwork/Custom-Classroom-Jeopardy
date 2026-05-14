@@ -50,6 +50,7 @@ class TeamState(BaseModel):
     joined: bool = False
     students: List[str] = Field(default_factory=list)
     answered_students: List[str] = Field(default_factory=list)
+    correct_counts: Dict[str, int] = Field(default_factory=dict)
 
 
 class ClueState(BaseModel):
@@ -71,6 +72,8 @@ class DailyDoubleState(BaseModel):
     active: bool = False
     team_name: Optional[str] = None
     wager: Optional[int] = None
+    question_revealed: bool = False
+    answer_expires_at: Optional[float] = None
 
 
 class FinalState(BaseModel):
@@ -78,8 +81,22 @@ class FinalState(BaseModel):
     prompt: str
     answer: str
     revealed: bool = False
+    phase: str = "pending"
+    wager_started_at: Optional[float] = None
+    wager_expires_at: Optional[float] = None
+    answer_started_at: Optional[float] = None
+    answer_expires_at: Optional[float] = None
+    leaders: Dict[str, str] = Field(default_factory=dict)
     wagers: Dict[str, int] = Field(default_factory=dict)
+    wager_submitted_by: Dict[str, str] = Field(default_factory=dict)
+    submissions: Dict[str, str] = Field(default_factory=dict)
+    submitted_by: Dict[str, str] = Field(default_factory=dict)
     scored: Dict[str, bool] = Field(default_factory=dict)
+    final_scores: Dict[str, int] = Field(default_factory=dict)
+    reveal_order: List[str] = Field(default_factory=list)
+    reveal_step: int = 0
+    reveal_spinning_index: Optional[int] = None
+    results_revealed: bool = False
 
 
 class ScoreEvent(BaseModel):
@@ -88,6 +105,9 @@ class ScoreEvent(BaseModel):
     student_name: Optional[str] = None
     delta: int
     correct: bool
+    clue_value: Optional[int] = None
+    clue_prompt: Optional[str] = None
+    clue_answer: Optional[str] = None
 
 
 class GameState(BaseModel):
@@ -111,6 +131,7 @@ class GameState(BaseModel):
 
 class StartGameRequest(BaseModel):
     config_path: str = "games/example.yaml"
+    previous_session_code: Optional[str] = None
 
 
 class JoinRequest(BaseModel):
@@ -150,3 +171,23 @@ class FinalWagersRequest(BaseModel):
 class FinalScoreRequest(BaseModel):
     session_code: str
     results: Dict[str, bool]
+
+
+class FinalWagerRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str
+    wager: int = Field(ge=0)
+
+
+class FinalAnswerRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str
+    answer: str
+
+
+class DailyDoubleWagerRequest(BaseModel):
+    session_code: str
+    team_name: str
+    wager: int = Field(ge=0)

@@ -21,6 +21,10 @@ from .models import (
     TeamState,
 )
 
+FINAL_WAGER_SECONDS = 60
+FINAL_ANSWER_SECONDS = 300
+DAILY_DOUBLE_ANSWER_SECONDS = 60
+
 
 class GameError(ValueError):
     """Raised when a game action is invalid for the current state."""
@@ -110,7 +114,87 @@ def public_state(state: GameState, reveal_answers: bool = False) -> dict:
             for clue in category["clues"]:
                 clue.pop("answer", None)
         payload["final"].pop("answer", None)
+        active_teams = active_final_team_names(state)
+        if len(payload["final"]["wagers"]) < len(active_teams):
+            payload["final"]["wagers"] = {}
+            payload["final"]["wager_values_hidden"] = True
+        if not payload["final"]["results_revealed"]:
+            payload["final"]["scored"] = {}
     return payload
+
+
+def all_board_clues_revealed(state: GameState) -> bool:
+    return all(clue.revealed for clue in iter_clues(state.categories))
+
+
+def active_final_teams(state: GameState) -> list[TeamState]:
+    teams = [team for team in state.teams if team.students]
+    return teams or state.teams
+
+
+def active_final_team_names(state: GameState) -> set[str]:
+    return {team.name for team in active_final_teams(state)}
+
+
+def available_wager(team: TeamState) -> int:
+    return team.score if team.score >= 500 else 500
+
+
+def pick_final_leader(team: TeamState) -> Optional[str]:
+    if not team.students:
+        return None
+    max_correct = max((team.correct_counts.get(student, 0) for student in team.students), default=0)
+    candidates = [
+        student
+        for student in team.students
+        if team.correct_counts.get(student, 0) == max_correct
+    ]
+    return random.choice(candidates)
+
+
+def start_final_wager_phase(state: GameState) -> GameState:
+    now = time.time()
+    state.phase = "final_wager"
+    state.current_clue_id = None
+    state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
+    state.buzz_order = []
+    state.daily_double.active = False
+    state.final.phase = "wager"
+    state.final.revealed = False
+    state.final.wager_started_at = now
+    state.final.wager_expires_at = now + FINAL_WAGER_SECONDS
+    state.final.answer_started_at = None
+    state.final.answer_expires_at = None
+    state.final.leaders = {
+        team.name: leader
+        for team in active_final_teams(state)
+        if (leader := pick_final_leader(team))
+    }
+    return state
+
+
+def ensure_final_wagers(state: GameState) -> None:
+    for team in active_final_teams(state):
+        if team.name not in state.final.wagers:
+            state.final.wagers[team.name] = available_wager(team)
+            state.final.wager_submitted_by[team.name] = "Timer"
+
+
+def begin_final_answer_phase(state: GameState) -> GameState:
+    if state.final.phase == "pending":
+        start_final_wager_phase(state)
+    if state.final.phase not in {"wager", "answer"}:
+        raise GameError("Final Jeopardy answers cannot be started now")
+    ensure_final_wagers(state)
+    now = time.time()
+    state.phase = "final_answer"
+    state.final.phase = "answer"
+    state.final.revealed = True
+    state.final.answer_started_at = now
+    state.final.answer_expires_at = now + FINAL_ANSWER_SECONDS
+    return state
 
 
 def join_team(state: GameState, team_name: str, student_name: str = "") -> GameState:
@@ -120,6 +204,7 @@ def join_team(state: GameState, team_name: str, student_name: str = "") -> GameS
     existing = {name.lower() for name in team.students}
     if student.lower() not in existing:
         team.students.append(student)
+    team.correct_counts.setdefault(student, 0)
     return state
 
 
@@ -140,10 +225,36 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
         state.daily_double.active = True
         state.daily_double.team_name = selecting_team
         state.daily_double.wager = None
+        state.daily_double.question_revealed = False
+        state.daily_double.answer_expires_at = None
     else:
         state.daily_double.active = False
         state.daily_double.team_name = None
         state.daily_double.wager = None
+        state.daily_double.question_revealed = False
+        state.daily_double.answer_expires_at = None
+    return state
+
+
+def lock_daily_double_wager(
+    state: GameState,
+    team_name: str,
+    wager: int,
+) -> GameState:
+    if state.phase != "board":
+        raise GameError("Daily Double wagers can only be locked during board play")
+    if not state.current_clue_id:
+        raise GameError("no clue is currently active")
+    clue = find_clue(state, state.current_clue_id)
+    if not clue.is_daily_double or not state.daily_double.active:
+        raise GameError("the current clue is not an active Daily Double")
+    find_team(state, team_name)
+    if wager < 0:
+        raise GameError("wager must be non-negative")
+    state.daily_double.team_name = team_name
+    state.daily_double.wager = wager
+    state.daily_double.question_revealed = True
+    state.daily_double.answer_expires_at = time.time() + DAILY_DOUBLE_ANSWER_SECONDS
     return state
 
 
@@ -201,6 +312,8 @@ def score_current_clue(
         if not scorer:
             raise GameError("Daily Double scoring requires a team")
         if wager is None:
+            wager = state.daily_double.wager
+        if wager is None:
             raise GameError("Daily Double scoring requires a wager")
         if wager < 0:
             raise GameError("wager must be non-negative")
@@ -223,11 +336,18 @@ def score_current_clue(
         student_name=state.buzz_winner_student if state.buzz_winner == scorer else None,
         delta=delta,
         correct=correct,
+        clue_value=amount,
+        clue_prompt=clue.prompt,
+        clue_answer=clue.answer,
     )
     if state.buzz_winner == scorer and state.buzz_winner_student:
         answered = {name.lower() for name in team.answered_students}
         if state.buzz_winner_student.lower() not in answered:
             team.answered_students.append(state.buzz_winner_student)
+        if correct:
+            team.correct_counts[state.buzz_winner_student] = (
+                team.correct_counts.get(state.buzz_winner_student, 0) + 1
+            )
         if len(team.answered_students) >= len(team.students):
             team.answered_students = []
     clue.revealed = True
@@ -237,18 +357,17 @@ def score_current_clue(
     state.buzz_expires_at = None
     state.buzz_order = []
     state.daily_double.active = False
+    state.daily_double.question_revealed = False
+    state.daily_double.answer_expires_at = None
+    if all_board_clues_revealed(state):
+        start_final_wager_phase(state)
     return state
 
 
 def reveal_final(state: GameState) -> GameState:
-    state.phase = "final"
-    state.current_clue_id = None
-    state.buzz_winner = None
-    state.buzz_winner_student = None
-    state.buzz_expires_at = None
-    state.buzz_order = []
-    state.final.revealed = True
-    return state
+    if state.final.phase == "pending":
+        return start_final_wager_phase(state)
+    return begin_final_answer_phase(state)
 
 
 def set_final_wagers(state: GameState, wagers: dict[str, int]) -> GameState:
@@ -260,19 +379,124 @@ def set_final_wagers(state: GameState, wagers: dict[str, int]) -> GameState:
         if wager < 0:
             raise GameError(f"wager for {team_name} must be non-negative")
     state.final.wagers = dict(wagers)
+    state.final.wager_submitted_by.update({team_name: "Teacher" for team_name in wagers})
+    return state
+
+
+def submit_final_wager(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    wager: int,
+) -> GameState:
+    if state.final.phase == "pending":
+        start_final_wager_phase(state)
+    if state.final.phase != "wager":
+        raise GameError("Final Jeopardy wagers are not open")
+    team = find_team(state, team_name)
+    student = normalize_student_name(student_name)
+    if state.final.leaders.get(team_name) != student:
+        raise GameError(f"{student} is not the final leader for {team_name}")
+    if time.time() > (state.final.wager_expires_at or 0):
+        wager = available_wager(team)
+    if wager < 0:
+        raise GameError("wager must be non-negative")
+    if wager > available_wager(team):
+        raise GameError(
+            f"wager cannot exceed ${available_wager(team)}; teams below $500 may wager up to $500"
+        )
+    state.final.wagers[team_name] = wager
+    state.final.wager_submitted_by[team_name] = student
+    if len(state.final.wagers) >= len(active_final_teams(state)):
+        begin_final_answer_phase(state)
+    return state
+
+
+def submit_final_answer(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    answer: str,
+) -> GameState:
+    if state.final.phase != "answer":
+        raise GameError("Final Jeopardy answers are not open")
+    student = normalize_student_name(student_name)
+    if state.final.leaders.get(team_name) != student:
+        raise GameError(f"{student} is not the final leader for {team_name}")
+    state.final.submissions[team_name] = answer.strip()
+    state.final.submitted_by[team_name] = student
+    if len(state.final.submissions) >= len(active_final_teams(state)):
+        state.phase = "final_review"
+        state.final.phase = "review"
+    return state
+
+
+def advance_final_timers(state: GameState) -> GameState:
+    now = time.time()
+    if state.final.phase == "wager" and state.final.wager_expires_at is not None:
+        if now >= state.final.wager_expires_at:
+            ensure_final_wagers(state)
+            begin_final_answer_phase(state)
+    if state.final.phase == "answer" and state.final.answer_expires_at is not None:
+        if now >= state.final.answer_expires_at:
+            for team in active_final_teams(state):
+                if team.name not in state.final.submissions:
+                    state.final.submissions[team.name] = ""
+                    state.final.submitted_by[team.name] = "Timer"
+            state.phase = "final_review"
+            state.final.phase = "review"
     return state
 
 
 def score_final(state: GameState, results: dict[str, bool]) -> GameState:
-    if not state.final.wagers:
-        raise GameError("final wagers must be entered before scoring")
+    ensure_final_wagers(state)
     for team_name, correct in results.items():
-        if team_name in state.final.scored:
-            continue
-        team = find_team(state, team_name)
-        wager = state.final.wagers.get(team_name, 0)
-        team.score += wager if correct else -wager
+        find_team(state, team_name)
         state.final.scored[team_name] = correct
-    if len(state.final.scored) >= len(state.teams):
-        state.phase = "complete"
+    state.phase = "final_review"
+    state.final.phase = "review"
+    return state
+
+
+def calculate_final_winners(state: GameState) -> GameState:
+    if state.final.results_revealed:
+        return state
+    ensure_final_wagers(state)
+    for team in active_final_teams(state):
+        if team.name not in state.final.submissions:
+            state.final.submissions[team.name] = ""
+            state.final.submitted_by[team.name] = "Timer"
+        if team.name not in state.final.scored:
+            state.final.scored[team.name] = False
+    state.final.final_scores = {}
+    for team in active_final_teams(state):
+        wager = state.final.wagers.get(team.name, 0)
+        correct = state.final.scored.get(team.name, False)
+        state.final.final_scores[team.name] = team.score + (wager if correct else -wager)
+    state.final.reveal_order = [
+        team.name
+        for team in sorted(
+            active_final_teams(state),
+            key=lambda item: state.final.final_scores.get(item.name, item.score),
+        )
+    ]
+    state.final.reveal_step = 0
+    state.final.reveal_spinning_index = None
+    state.final.results_revealed = True
+    state.phase = "complete"
+    state.final.phase = "complete"
+    return state
+
+
+def advance_final_reveal(state: GameState) -> GameState:
+    if state.final.phase != "complete" or not state.final.results_revealed:
+        raise GameError("final results have not been calculated")
+    if state.final.reveal_spinning_index is not None:
+        state.final.reveal_step = max(
+            state.final.reveal_step,
+            state.final.reveal_spinning_index + 1,
+        )
+        state.final.reveal_spinning_index = None
+    elif state.final.reveal_step < len(state.final.reveal_order):
+        state.final.reveal_spinning_index = state.final.reveal_step
     return state

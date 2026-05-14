@@ -4,7 +4,9 @@ import pytest
 
 from app.game import (
     GameError,
+    advance_final_timers,
     buzz,
+    calculate_final_winners,
     create_game_state,
     join_team,
     load_game_config,
@@ -13,6 +15,8 @@ from app.game import (
     score_final,
     select_clue,
     set_final_wagers,
+    submit_final_wager,
+    advance_final_reveal,
 )
 
 
@@ -102,16 +106,61 @@ def test_student_buzzer_rotation_resets_after_team_cycle() -> None:
     assert state.buzz_winner_student == "Alice"
 
 
+def test_final_uses_joined_student_teams_only() -> None:
+    state = create_game_state(load_game_config("games/final_smoke.yaml"), session_code="TEST5")
+    join_team(state, "Red Team", "Alice")
+    reveal_final(state)
+
+    assert state.phase == "final_wager"
+    assert state.final.leaders == {"Red Team": "Alice"}
+
+    state.final.wager_expires_at = 0
+    advance_final_timers(state)
+    assert state.phase == "final_answer"
+    assert state.final.wagers == {"Red Team": 500}
+
+
+def test_final_wager_allows_500_floor_for_low_scores() -> None:
+    state = create_game_state(load_game_config("games/final_smoke.yaml"), session_code="TEST6")
+    join_team(state, "Red Team", "Alice")
+    red = next(team for team in state.teams if team.name == "Red Team")
+    red.score = -200
+    reveal_final(state)
+
+    submit_final_wager(state, "Red Team", "Alice", 500)
+    assert state.final.wagers["Red Team"] == 500
+
+    state = create_game_state(load_game_config("games/final_smoke.yaml"), session_code="TEST7")
+    join_team(state, "Red Team", "Alice")
+    reveal_final(state)
+    with pytest.raises(GameError):
+        submit_final_wager(state, "Red Team", "Alice", 501)
+
+
 def test_final_jeopardy_scoring_once() -> None:
     state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST3")
     join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    join_team(state, "Purple Team", "Pat")
     reveal_final(state)
+    assert state.phase == "final_wager"
     set_final_wagers(state, {"Red Team": 500, "Blue Team": 200, "Purple Team": 0})
+    reveal_final(state)
+    assert state.phase == "final_answer"
     score_final(state, {"Red Team": True, "Blue Team": False, "Purple Team": True})
-    score_final(state, {"Red Team": False})
+    calculate_final_winners(state)
+    calculate_final_winners(state)
 
     scores = {team.name: team.score for team in state.teams}
-    assert scores == {"Red Team": 500, "Blue Team": -200, "Purple Team": 0}
+    assert scores == {"Red Team": 0, "Blue Team": 0, "Purple Team": 0}
+    assert state.final.final_scores == {"Red Team": 500, "Blue Team": -200, "Purple Team": 0}
+    assert state.final.reveal_order == ["Blue Team", "Purple Team", "Red Team"]
+    advance_final_reveal(state)
+    assert state.final.reveal_spinning_index == 0
+    assert state.final.reveal_step == 0
+    advance_final_reveal(state)
+    assert state.final.reveal_spinning_index is None
+    assert state.final.reveal_step == 1
     assert state.phase == "complete"
 
 

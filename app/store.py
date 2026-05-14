@@ -64,6 +64,13 @@ class GameStore:
             return None
         return GameState.model_validate(json.loads(row[0]))
 
+    def delete(self, session_code: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM sessions WHERE session_code = ?",
+                (session_code.upper(),),
+            )
+
     def update(self, session_code: str, mutator: Callable[[GameState], GameState]) -> GameState:
         with self._lock:
             state = self.get(session_code)
