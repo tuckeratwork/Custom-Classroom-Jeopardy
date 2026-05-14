@@ -66,6 +66,9 @@ def create_game_state(config: GameConfig, session_code: Optional[str] = None) ->
     daily_double_id = random.choice(clue_ids)
     for clue in iter_clues(categories):
         clue.is_daily_double = clue.id == daily_double_id
+        if clue.is_daily_double and config.daily_double:
+            clue.prompt = config.daily_double.prompt
+            clue.answer = config.daily_double.answer
 
     return GameState(
         session_code=session_code or generate_session_code(),
@@ -160,6 +163,9 @@ def start_final_wager_phase(state: GameState) -> GameState:
     state.buzz_winner_student = None
     state.buzz_expires_at = None
     state.buzz_order = []
+    state.steal_eligible = False
+    state.steal_active = False
+    state.steal_lockout_team = None
     state.daily_double.active = False
     state.final.phase = "wager"
     state.final.revealed = False
@@ -211,6 +217,12 @@ def join_team(state: GameState, team_name: str, student_name: str = "") -> GameS
 def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = None) -> GameState:
     if state.phase != "board":
         raise GameError("clues can only be selected during board play")
+    if (
+        state.current_clue_id
+        and state.current_clue_id != clue_id
+        and (state.steal_eligible or state.steal_active)
+    ):
+        finish_current_clue(state, find_clue(state, state.current_clue_id))
     clue = find_clue(state, clue_id)
     if clue.revealed:
         raise GameError("that clue has already been revealed")
@@ -221,6 +233,9 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
     state.buzz_winner_student = None
     state.buzz_expires_at = None
     state.buzz_order = []
+    state.steal_eligible = False
+    state.steal_active = False
+    state.steal_lockout_team = None
     if clue.is_daily_double:
         state.daily_double.active = True
         state.daily_double.team_name = selecting_team
@@ -267,12 +282,15 @@ def buzz(state: GameState, team_name: str, student_name: str = "") -> GameState:
         raise GameError("no clue is currently active")
     if state.daily_double.active:
         raise GameError("buzzing is disabled for Daily Double clues")
+    if state.steal_active and team_name == state.steal_lockout_team:
+        raise GameError(f"{team_name} is locked out of this steal")
     if student.lower() not in {name.lower() for name in team.students}:
         raise GameError(f"{student} has not joined {team_name}")
-    if len(team.answered_students) >= len(team.students):
-        team.answered_students = []
-    if student.lower() in {name.lower() for name in team.answered_students}:
-        raise GameError(f"{student} has already answered this team cycle")
+    if not state.steal_active:
+        if len(team.answered_students) >= len(team.students):
+            team.answered_students = []
+        if student.lower() in {name.lower() for name in team.answered_students}:
+            raise GameError(f"{student} has already answered this team cycle")
     if team_name not in state.buzz_order:
         state.buzz_order.append(team_name)
     if state.buzz_winner is None:
@@ -292,6 +310,21 @@ def reset_buzzer(state: GameState) -> GameState:
     return state
 
 
+def finish_current_clue(state: GameState, clue: ClueState) -> None:
+    clue.revealed = True
+    state.current_clue_id = None
+    state.buzz_winner = None
+    state.buzz_winner_student = None
+    state.buzz_expires_at = None
+    state.buzz_order = []
+    state.steal_eligible = False
+    state.steal_active = False
+    state.steal_lockout_team = None
+    state.daily_double.active = False
+    state.daily_double.question_revealed = False
+    state.daily_double.answer_expires_at = None
+
+
 def score_current_clue(
     state: GameState,
     correct: bool,
@@ -307,6 +340,12 @@ def score_current_clue(
     if clue.revealed:
         raise GameError("that clue has already been scored")
 
+    if not clue.is_daily_double and state.steal_active and not state.buzz_winner and not correct:
+        finish_current_clue(state, clue)
+        if all_board_clues_revealed(state):
+            start_final_wager_phase(state)
+        return state
+
     if clue.is_daily_double:
         scorer = team_name or state.daily_double.team_name
         if not scorer:
@@ -321,13 +360,24 @@ def score_current_clue(
         state.daily_double.wager = wager
         state.daily_double.team_name = scorer
     else:
-        scorer = team_name or state.buzz_winner
+        scorer = state.buzz_winner or team_name
         if not scorer:
             raise GameError("regular clue scoring requires a buzz winner or team")
         amount = clue.value
 
     team = find_team(state, scorer)
-    delta = amount if correct else -amount
+    steal_attempt = (
+        not clue.is_daily_double
+        and state.steal_active
+        and scorer != state.steal_lockout_team
+    )
+    opens_steal = (
+        not clue.is_daily_double
+        and not correct
+        and not state.steal_active
+        and state.buzz_winner == scorer
+    )
+    delta = amount if correct else (0 if steal_attempt else -amount)
     team.score += delta
     state.score_event_id += 1
     state.score_event = ScoreEvent(
@@ -338,29 +388,56 @@ def score_current_clue(
         correct=correct,
         clue_value=amount,
         clue_prompt=clue.prompt,
-        clue_answer=clue.answer,
+        clue_answer=None if opens_steal else clue.answer,
     )
     if state.buzz_winner == scorer and state.buzz_winner_student:
-        answered = {name.lower() for name in team.answered_students}
-        if state.buzz_winner_student.lower() not in answered:
-            team.answered_students.append(state.buzz_winner_student)
+        if not steal_attempt:
+            answered = {name.lower() for name in team.answered_students}
+            if state.buzz_winner_student.lower() not in answered:
+                team.answered_students.append(state.buzz_winner_student)
         if correct:
             team.correct_counts[state.buzz_winner_student] = (
                 team.correct_counts.get(state.buzz_winner_student, 0) + 1
             )
-        if len(team.answered_students) >= len(team.students):
+        if not steal_attempt and len(team.answered_students) >= len(team.students):
             team.answered_students = []
-    clue.revealed = True
-    state.current_clue_id = None
-    state.buzz_winner = None
-    state.buzz_winner_student = None
-    state.buzz_expires_at = None
-    state.buzz_order = []
-    state.daily_double.active = False
-    state.daily_double.question_revealed = False
-    state.daily_double.answer_expires_at = None
+    if opens_steal:
+        state.steal_eligible = False
+        state.steal_active = True
+        state.steal_lockout_team = scorer
+        state.buzz_winner = None
+        state.buzz_winner_student = None
+        state.buzz_expires_at = None
+        state.buzz_order = []
+        return state
+    finish_current_clue(state, clue)
     if all_board_clues_revealed(state):
         start_final_wager_phase(state)
+    return state
+
+
+def continue_current_clue(state: GameState) -> GameState:
+    if state.phase != "board":
+        raise GameError("board clues cannot be continued outside board play")
+    if not state.current_clue_id:
+        raise GameError("no clue is currently active")
+    clue = find_clue(state, state.current_clue_id)
+    if clue.revealed:
+        raise GameError("that clue has already been scored")
+    finish_current_clue(state, clue)
+    if all_board_clues_revealed(state):
+        start_final_wager_phase(state)
+    return state
+
+
+def set_team_scores(state: GameState, scores: dict[str, int]) -> GameState:
+    team_names = {team.name for team in state.teams}
+    unknown = set(scores) - team_names
+    if unknown:
+        raise GameError(f"unknown teams in scores: {', '.join(sorted(unknown))}")
+    for team in state.teams:
+        if team.name in scores:
+            team.score = scores[team.name]
     return state
 
 

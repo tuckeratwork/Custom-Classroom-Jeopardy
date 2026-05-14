@@ -1,0 +1,104 @@
+title: The REAL CNA Modules 1 - 5
+teams:
+  - Red Team
+  - Blue Team
+
+categories:
+  - name: Great White Wireshark
+    clues:
+      - value: 100
+        prompt: These are the three main port states Nmap might report.
+        answer: Open, Closed, and Filtered
+      - value: 200
+        prompt: This command line tool will utilize Twofish encryption.
+        answer: Cryptcat
+      - value: 300
+        prompt: Nmap scans these ports by default.
+        answer: The 1000 most popular, top, or common ports
+      - value: 400
+        prompt: This method of facilitating a buffer overflow attack uses repeated jump instructions.
+        answer: Trampoline sled
+      - value: 500
+        prompt: This component of IPv6 creates a host's IP address based on router advertisements.
+        answer: Stateless Address Auto-configuration or SLAAC
+
+  - name: Where Are My Keys?
+    clues:
+      - value: 100
+        prompt: Base64, UTF-8, ASCII, UTF-16, hexadecimal, and URL encoding are examples of this.
+        answer: Encoding
+      - value: 200
+        prompt: This is the key I would use to encrypt a message for a specific recipient.
+        answer: The recipient's public key
+      - value: 300
+        prompt: This is the paid alternative to GPG.
+        answer: Pretty Good Privacy or PGP
+      - value: 400
+        prompt: This layer 3 security protocol provides a cryptographic security service for IP traffic.
+        answer: IPsec
+      - value: 500
+        prompt: This property of symmetric encryption hides the relationship between the plaintext and ciphertext.
+        answer: Confusion
+
+  - name: Hips Don't Lie
+    clues:
+      - value: 100
+        prompt: In the same way ogres have layers, this security strategy uses layers of protection.
+        answer: Defense in Depth or DID
+      - value: 200
+        prompt: This would be the term to describe a device that monitors traffic at the network perimeter.
+        answer: Perimeter NIDS
+      - value: 300
+        prompt: These are the two types of packet filtering commonly discussed in CNA.
+        answer: Stateless and stateful or dynamic
+      - value: 400
+        prompt: This physical component of an IDS/IPS collects network traffic for analysis.
+        answer: Sensor or NIC
+      - value: 500
+        prompt: This technique can be used by network administrators to isolate and protect portions of a network.
+        answer: Network segmentation
+
+  - name: Oops I Snorted
+    clues:
+      - value: 100
+        prompt: These are uniquely identifying characteristics used by Snort to detect activity.
+        answer: Signatures
+      - value: 200
+        prompt: This is the event classification for benign activity that is incorrectly flagged as malicious.
+        answer: False positive
+      - value: 300
+        prompt: Using a series of 0x90 opcodes, I can facilitate this type of exploit.
+        answer: Buffer overflow attack
+      - value: 400
+        prompt: Upholding the Operations layer of Defense in Depth requires maintaining this known-good standard.
+        answer: Baseline configuration
+      - value: 500
+        prompt: Snort infers its mode from command-line options, but packet capture is handled by this module.
+        answer: Data Acquisition or DAQ module
+
+  - name: Cat Phishing
+    clues:
+      - value: 100
+        prompt: This social engineering technique involves threatening or coercing a victim.
+        answer: Blackmail
+      - value: 200
+        prompt: This social engineering technique involves establishing a fabricated scenario or identity.
+        answer: Pretexting
+      - value: 300
+        prompt: This two-word term describes a phishing attack that is tailored to a specific individual or organization.
+        answer: Spear phishing
+      - value: 400
+        prompt: LimeWire would be an example of this type of attack or infection path.
+        answer: Drive-by download
+      - value: 500
+        prompt: Deemed the worst breach of U.S. military computers, this road-apple-introduced malware led to Operation Buckshot Yankee and the eventual formation of the US Cyber Command.
+        answer: Agent.btz
+
+daily_double:
+  prompt: These two branches of the US military, at least according to current public knowledge, have had no known cyber insider threat incidents.
+  answer: Space Force and Marine Corps
+
+final:
+  category: IPv6 Attacks
+  prompt: Name three IPv6 attacks that were discussed in class.
+  answer: Address spoofing, SLAAC spoofing, router advertisement spoofing, or another valid IPv6 attack discussed in class

@@ -9,14 +9,16 @@ let lastPresentedClueId = null;
 let confettiSignature = null;
 
 const $ = (id) => document.getElementById(id);
+const audioCacheBust = `v=${Date.now()}`;
+const audioUrl = (path) => `${path}?${audioCacheBust}`;
 
 const audioFiles = {
-  suspense: new Audio("/static/audio/suspense_reveal.wav"),
-  results: new Audio("/static/audio/results_ceremony.wav"),
+  suspense: new Audio(audioUrl("/static/audio/suspense_reveal.wav")),
+  results: new Audio(audioUrl("/static/audio/results_ceremony.wav")),
 };
 audioFiles.results.loop = true;
 audioFiles.suspense.volume = 0.65;
-audioFiles.results.volume = 0.42;
+audioFiles.results.volume = 0.315;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -205,7 +207,7 @@ function renderClue() {
     lastPresentedClueId = null;
     return;
   }
-  const showAnswer = Date.now() < answerRevealUntil;
+  const showAnswer = Date.now() < answerRevealUntil && Boolean(clue.answer);
   const dailyDoubleHidden = clue.is_daily_double && !state.daily_double?.question_revealed;
   if (lastPresentedClueId !== clue.id) {
     board.classList.remove("presentation-clue-card-open");
@@ -231,7 +233,9 @@ function maybeRevealAnswer() {
     return;
   }
   lastScoreEventId = state.score_event.id;
-  answerRevealUntil = Date.now() + 5000;
+  if (state.score_event.clue_answer) {
+    answerRevealUntil = Date.now() + 5000;
+  }
 }
 
 function renderWinnerReveal() {

@@ -7,13 +7,16 @@ from app.game import (
     advance_final_timers,
     buzz,
     calculate_final_winners,
+    continue_current_clue,
     create_game_state,
     join_team,
     load_game_config,
+    reset_buzzer,
     reveal_final,
     score_current_clue,
     score_final,
     select_clue,
+    set_team_scores,
     set_final_wagers,
     submit_final_wager,
     advance_final_reveal,
@@ -79,6 +82,14 @@ def test_daily_double_requires_wager() -> None:
     assert clue.revealed is True
 
 
+def test_daily_double_config_overwrites_random_clue_content() -> None:
+    state = create_game_state(load_game_config("games/cna_modules_1_5.yaml"), session_code="TEST8")
+    clue = next(clue for category in state.categories for clue in category.clues if clue.is_daily_double)
+
+    assert clue.prompt.startswith("These two branches of the US military")
+    assert clue.answer == "Space Force and Marine Corps"
+
+
 def test_student_buzzer_rotation_resets_after_team_cycle() -> None:
     state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST4")
     clues = [
@@ -104,6 +115,177 @@ def test_student_buzzer_rotation_resets_after_team_cycle() -> None:
     select_clue(state, clues[2].id)
     buzz(state, "Red Team", "Alice")
     assert state.buzz_winner_student == "Alice"
+
+
+def test_wrong_answer_can_open_one_steal_without_rotation_or_penalty() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST9")
+    clues = [
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    ]
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Red Team", "Ari")
+    join_team(state, "Blue Team", "Ben")
+    join_team(state, "Blue Team", "Bea")
+
+    select_clue(state, clues[0].id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False, team_name="Blue Team")
+
+    red = next(team for team in state.teams if team.name == "Red Team")
+    assert red.score == -clues[0].value
+    assert red.answered_students == ["Alice"]
+    assert state.current_clue_id == clues[0].id
+    assert state.steal_active is True
+    assert clues[0].revealed is False
+    with pytest.raises(GameError):
+        buzz(state, "Red Team", "Alice")
+    with pytest.raises(GameError):
+        buzz(state, "Red Team", "Ari")
+
+    buzz(state, "Blue Team", "Ben")
+    score_current_clue(state, correct=False, team_name="Red Team")
+
+    blue = next(team for team in state.teams if team.name == "Blue Team")
+    assert blue.score == 0
+    assert blue.answered_students == []
+    assert clues[0].revealed is True
+    assert state.current_clue_id is None
+    assert state.steal_active is False
+
+
+def test_correct_steal_scores_without_adding_to_answered_rotation() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST12")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+    buzz(state, "Blue Team", "Ben")
+    score_current_clue(state, correct=True)
+
+    blue = next(team for team in state.teams if team.name == "Blue Team")
+    assert blue.score == clue.value
+    assert blue.answered_students == []
+    assert blue.correct_counts["Ben"] == 1
+
+
+def test_reset_buzzer_only_clears_current_buzz_during_steal() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST14")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+    buzz(state, "Blue Team", "Ben")
+
+    reset_buzzer(state)
+
+    assert state.steal_active is True
+    assert state.steal_lockout_team == "Red Team"
+    assert state.buzz_winner is None
+    assert state.buzz_winner_student is None
+    assert state.buzz_order == []
+
+
+def test_teacher_can_skip_unanswered_steal_by_selecting_next_clue() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST10")
+    clues = [
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    ]
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    select_clue(state, clues[0].id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+
+    select_clue(state, clues[1].id)
+
+    assert clues[0].revealed is True
+    assert state.current_clue_id == clues[1].id
+    assert state.steal_active is False
+    assert state.steal_lockout_team is None
+
+
+def test_teacher_can_continue_after_steal_window_without_more_points() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST13")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+
+    continue_current_clue(state)
+
+    scores = {team.name: team.score for team in state.teams}
+    assert scores["Red Team"] == -clue.value
+    assert scores["Blue Team"] == 0
+    assert clue.revealed is True
+    assert state.current_clue_id is None
+    assert state.steal_active is False
+
+
+def test_wrong_without_steal_buzz_continues_without_more_points() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST15")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+
+    score_current_clue(state, correct=False, team_name="Red Team")
+
+    scores = {team.name: team.score for team in state.teams}
+    assert scores["Red Team"] == -clue.value
+    assert scores["Blue Team"] == 0
+    assert clue.revealed is True
+    assert state.current_clue_id is None
+
+
+def test_teacher_can_override_scores() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST11")
+
+    set_team_scores(state, {"Red Team": 1200, "Blue Team": -100})
+
+    scores = {team.name: team.score for team in state.teams}
+    assert scores["Red Team"] == 1200
+    assert scores["Blue Team"] == -100
+    assert scores["Purple Team"] == 0
 
 
 def test_final_uses_joined_student_teams_only() -> None:

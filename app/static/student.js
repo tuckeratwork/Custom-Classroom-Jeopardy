@@ -16,17 +16,19 @@ let finalRevealSignature = null;
 let finalActionKey = null;
 
 const $ = (id) => document.getElementById(id);
+const audioCacheBust = `v=${Date.now()}`;
+const audioUrl = (path) => `${path}?${audioCacheBust}`;
 
 const audioFiles = {
-  music: new Audio("/static/audio/question_loop.wav"),
-  suspense: new Audio("/static/audio/suspense_reveal.wav"),
-  results: new Audio("/static/audio/results_ceremony.wav"),
+  music: new Audio(audioUrl("/static/audio/question_loop.wav")),
+  suspense: new Audio(audioUrl("/static/audio/suspense_reveal.wav")),
+  results: new Audio(audioUrl("/static/audio/results_ceremony.wav")),
 };
 audioFiles.music.loop = true;
 audioFiles.results.loop = true;
-audioFiles.music.volume = 0.22;
+audioFiles.music.volume = 0.165;
 audioFiles.suspense.volume = 0.55;
-audioFiles.results.volume = 0.36;
+audioFiles.results.volume = 0.27;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -224,6 +226,9 @@ function canBuzz(clue) {
   if (!team || !studentName) {
     return false;
   }
+  if (state.steal_active) {
+    return team.name !== state.steal_lockout_team;
+  }
   const answered = team.answered_students || [];
   const students = team.students || [];
   return answered.length >= students.length || !answered.some((name) => name.toLowerCase() === studentName.toLowerCase());
@@ -266,7 +271,7 @@ function showScorePopup(event) {
   const popup = document.createElement("div");
   const positive = event.delta >= 0;
   popup.className = `score-popup ${positive ? "score-popup-positive" : "score-popup-negative"}`;
-  const sign = positive ? "+" : "-";
+  const sign = event.delta > 0 ? "+" : event.delta < 0 ? "-" : "";
   popup.textContent = `${event.team_name} ${sign}$${Math.abs(event.delta)}`;
   document.body.appendChild(popup);
   window.setTimeout(() => popup.remove(), 2200);
@@ -559,6 +564,10 @@ function render() {
       : `${state.buzz_winner_student || "A teammate"} buzzed first.`;
   } else if (state.buzz_winner) {
     $("student-status").textContent = `${state.buzz_winner_student || "A student"} from ${state.buzz_winner} buzzed first.`;
+  } else if (clue && state.steal_active && state.steal_lockout_team === teamName) {
+    $("student-status").textContent = "Your team is locked out of this steal.";
+  } else if (clue && state.steal_active) {
+    $("student-status").textContent = "Steal opportunity. Buzz when ready.";
   } else if (clue && !clue.is_daily_double && !canBuzz(clue)) {
     $("student-status").textContent = "Wait for the rest of your team to answer.";
   } else if (clue && !clue.is_daily_double) {

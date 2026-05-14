@@ -13,6 +13,7 @@ from .game import (
     advance_final_timers,
     buzz,
     calculate_final_winners,
+    continue_current_clue,
     create_game_state,
     join_team,
     load_game_config,
@@ -23,6 +24,7 @@ from .game import (
     score_current_clue,
     score_final,
     select_clue,
+    set_team_scores,
     set_final_wagers,
     submit_final_answer,
     submit_final_wager,
@@ -36,6 +38,7 @@ from .models import (
     FinalWagersRequest,
     JoinRequest,
     ScoreClueRequest,
+    ScoreOverrideRequest,
     SelectClueRequest,
     SessionRequest,
     StartGameRequest,
@@ -122,12 +125,12 @@ async def start_game(payload: StartGameRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save(state)
     if previous_session_code and previous_session_code != state.session_code:
-        await manager.broadcast(
-            previous_session_code,
+        await manager.broadcast_all(
             {
                 "type": "session_reset",
                 "new_session_code": state.session_code,
             },
+            exclude={state.session_code},
         )
         store.delete(previous_session_code)
     await broadcast_state(state.session_code)
@@ -203,6 +206,18 @@ async def score_clue_route(payload: ScoreClueRequest) -> dict:
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/clue/continue")
+async def continue_clue_route(payload: SessionRequest) -> dict:
+    try:
+        state = store.update(payload.session_code, continue_current_clue)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
 @app.post("/api/daily-double/wager")
 async def daily_double_wager_route(payload: DailyDoubleWagerRequest) -> dict:
     try:
@@ -228,6 +243,21 @@ async def reset_buzzer_route(payload: SessionRequest) -> dict:
         state = store.update(payload.session_code, reset_buzzer)
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/scores")
+async def set_scores_route(payload: ScoreOverrideRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: set_team_scores(current, payload.scores),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
 

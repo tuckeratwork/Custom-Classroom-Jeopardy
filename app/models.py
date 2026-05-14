@@ -27,10 +27,21 @@ class FinalConfig(BaseModel):
     answer: str = Field(min_length=1)
 
 
+class DailyDoubleConfig(BaseModel):
+    prompt: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+
+    @field_validator("prompt", "answer", mode="before")
+    @classmethod
+    def coerce_text(cls, value: object) -> str:
+        return str(value)
+
+
 class GameConfig(BaseModel):
     title: str = Field(min_length=1)
     teams: List[str] = Field(min_length=1)
     categories: List[CategoryConfig] = Field(min_length=1)
+    daily_double: Optional[DailyDoubleConfig] = None
     final: FinalConfig
 
     @model_validator(mode="after")
@@ -124,6 +135,9 @@ class GameState(BaseModel):
     last_buzz_team: Optional[str] = None
     last_buzz_student: Optional[str] = None
     buzz_order: List[str] = Field(default_factory=list)
+    steal_eligible: bool = False
+    steal_active: bool = False
+    steal_lockout_team: Optional[str] = None
     daily_double: DailyDoubleState
     score_event: Optional[ScoreEvent] = None
     score_event_id: int = 0
@@ -161,6 +175,11 @@ class ScoreClueRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     session_code: str
+
+
+class ScoreOverrideRequest(BaseModel):
+    session_code: str
+    scores: Dict[str, int]
 
 
 class FinalWagersRequest(BaseModel):

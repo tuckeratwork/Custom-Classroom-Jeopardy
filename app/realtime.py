@@ -28,3 +28,10 @@ class ConnectionManager:
                 await websocket.send_json(message)
             except RuntimeError:
                 self.disconnect(session_code, websocket)
+
+    async def broadcast_all(self, message: dict, exclude: set[str] | None = None) -> None:
+        excluded = exclude or set()
+        for session_code in list(self._connections):
+            if session_code in excluded:
+                continue
+            await self.broadcast(session_code, message)

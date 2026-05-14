@@ -15,17 +15,19 @@ let finalAdvanceInFlight = false;
 let finalRevealSignature = null;
 
 const $ = (id) => document.getElementById(id);
+const audioCacheBust = `v=${Date.now()}`;
+const audioUrl = (path) => `${path}?${audioCacheBust}`;
 
 const audioFiles = {
-  music: new Audio("/static/audio/question_loop.wav"),
-  suspense: new Audio("/static/audio/suspense_reveal.wav"),
-  results: new Audio("/static/audio/results_ceremony.wav"),
+  music: new Audio(audioUrl("/static/audio/question_loop.wav")),
+  suspense: new Audio(audioUrl("/static/audio/suspense_reveal.wav")),
+  results: new Audio(audioUrl("/static/audio/results_ceremony.wav")),
 };
 audioFiles.music.loop = true;
 audioFiles.results.loop = true;
-audioFiles.music.volume = 0.24;
+audioFiles.music.volume = 0.18;
 audioFiles.suspense.volume = 0.6;
-audioFiles.results.volume = 0.38;
+audioFiles.results.volume = 0.285;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -246,7 +248,11 @@ function renderScores() {
     }
     const students = team.students?.length ? ` (${team.students.length} students)` : "";
     const deltaLabel = lastScores && delta < 0 ? `<em class="score-delta">-$${Math.abs(delta)}</em>` : "";
-    row.innerHTML = `<span>${team.name}${team.joined ? students : " (not joined)"}</span><span class="score-total">${deltaLabel}<strong>$${score}</strong></span>`;
+    row.innerHTML = `
+      <span>${team.name}${team.joined ? students : " (not joined)"}</span>
+      <span class="score-total">${deltaLabel}<strong>$${score}</strong></span>
+      <input data-score-team="${team.name}" class="score-override-input" type="number" step="1" value="${score}" aria-label="${team.name} score">
+    `;
     scores.appendChild(row);
 
     const option = document.createElement("option");
@@ -264,13 +270,21 @@ function renderScores() {
   lastScores = Object.fromEntries(state.teams.map((team) => [team.name, displayScore(team)]));
 }
 
+async function saveScoreOverrides() {
+  const scores = {};
+  document.querySelectorAll("[data-score-team]").forEach((input) => {
+    scores[input.dataset.scoreTeam] = Number(input.value || 0);
+  });
+  await api("/api/scores", { session_code: sessionCode(), scores });
+}
+
 function showScorePopup(event) {
   const existing = document.querySelector(".score-popup");
   existing?.remove();
   const popup = document.createElement("div");
   const positive = event.delta >= 0;
   popup.className = `score-popup ${positive ? "score-popup-positive" : "score-popup-negative"}`;
-  const sign = positive ? "+" : "-";
+  const sign = event.delta > 0 ? "+" : event.delta < 0 ? "-" : "";
   const student = event.student_name ? `${event.student_name}, ` : "";
   popup.textContent = `${student}${event.team_name} ${sign}$${Math.abs(event.delta)}`;
   document.body.appendChild(popup);
@@ -321,13 +335,19 @@ function renderControls() {
     current.classList.remove("muted");
     const marker = clue.is_daily_double ? "Daily Double: " : "";
     current.innerHTML = `<strong>$${clue.value}</strong><br>${marker}${clue.prompt}<hr><span class="muted">Answer: ${clue.answer}</span>`;
-    $("buzz-status").textContent = clue.is_daily_double
-      ? `Daily Double for ${state.daily_double.team_name || "selected team"}`
-      : state.buzz_winner
-        ? `${state.buzz_winner_student || "A student"} from ${state.buzz_winner} buzzed first`
-        : lastBuzz || "Waiting for a buzz.";
+    if (clue.is_daily_double) {
+      $("buzz-status").textContent = `Daily Double for ${state.daily_double.team_name || "selected team"}`;
+    } else if (state.buzz_winner) {
+      const stealLabel = state.steal_active ? " for the steal" : "";
+      $("buzz-status").textContent = `${state.buzz_winner_student || "A student"} from ${state.buzz_winner} buzzed first${stealLabel}`;
+    } else if (state.steal_active) {
+      $("buzz-status").textContent = `${state.steal_lockout_team} is locked out. Remaining teams can buzz or you can continue.`;
+    } else {
+      $("buzz-status").textContent = lastBuzz || "Waiting for a buzz.";
+    }
   }
   dailyControls.classList.toggle("hidden", !clue?.is_daily_double);
+  $("reset-buzzer").textContent = "Reset buzzers";
 }
 
 function timerRemaining() {
@@ -631,6 +651,14 @@ $("score-wrong").addEventListener("click", () => {
 
 $("reset-buzzer").addEventListener("click", () => {
   api("/api/buzzer/reset", { session_code: sessionCode() });
+});
+
+$("continue-clue").addEventListener("click", () => {
+  api("/api/clue/continue", { session_code: sessionCode() });
+});
+
+$("save-scores").addEventListener("click", () => {
+  saveScoreOverrides();
 });
 
 $("lock-daily-double").addEventListener("click", () => {
