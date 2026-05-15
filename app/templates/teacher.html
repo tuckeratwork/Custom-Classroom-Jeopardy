@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Teacher Jeopardy Board</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260514-final12">
+    <link rel="stylesheet" href="/static/styles.css?v=20260515-auth2">
   </head>
   <body data-role="teacher">
     <header class="topbar">
@@ -19,11 +19,14 @@
     <main class="layout">
       <section class="board-panel">
         <div class="actions">
-          <button id="start-game" class="danger">Reset Game</button>
-          <input id="config-path" value="games/example.yaml" aria-label="Game YAML path">
+          <button id="start-game" class="danger">Start New Game</button>
+          <select id="config-path" aria-label="Game YAML file"></select>
+          <label class="compact-field" for="team-count">Teams</label>
+          <input id="team-count" type="number" min="2" max="10" value="2" aria-label="Number of teams">
           <button id="refresh-game" class="secondary">Refresh</button>
           <a id="presentation-link" class="button-link secondary" href="/board" target="_blank">Presentation</a>
         </div>
+        <div id="team-name-fields" class="team-name-fields"></div>
         <div id="board" class="board" aria-live="polite"></div>
       </section>
 
@@ -34,6 +37,11 @@
           <div class="button-row">
             <button id="save-scores" class="secondary">Save score changes</button>
           </div>
+        </section>
+
+        <section>
+          <h2>Students</h2>
+          <div id="student-roster" class="student-roster"></div>
         </section>
 
         <section>
@@ -72,6 +80,6 @@
       </aside>
     </main>
 
-    <script src="/static/teacher.js?v=20260514-final12"></script>
+    <script src="/static/teacher.js?v=20260515-auth2"></script>
   </body>
 </html>

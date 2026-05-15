@@ -39,7 +39,7 @@ class DailyDoubleConfig(BaseModel):
 
 class GameConfig(BaseModel):
     title: str = Field(min_length=1)
-    teams: List[str] = Field(min_length=1)
+    teams: List[str] = Field(default_factory=list)
     categories: List[CategoryConfig] = Field(min_length=1)
     daily_double: Optional[DailyDoubleConfig] = None
     final: FinalConfig
@@ -124,6 +124,7 @@ class ScoreEvent(BaseModel):
 class GameState(BaseModel):
     session_code: str
     title: str
+    owner_name: Optional[str] = None
     teams: List[TeamState]
     categories: List[CategoryState]
     final: FinalState
@@ -146,6 +147,7 @@ class GameState(BaseModel):
 class StartGameRequest(BaseModel):
     config_path: str = "games/example.yaml"
     previous_session_code: Optional[str] = None
+    team_names: Optional[List[str]] = None
 
 
 class JoinRequest(BaseModel):
@@ -175,6 +177,12 @@ class ScoreClueRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     session_code: str
+
+
+class StudentRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str = Field(max_length=80)
 
 
 class ScoreOverrideRequest(BaseModel):

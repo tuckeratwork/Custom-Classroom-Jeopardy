@@ -164,7 +164,7 @@ function showJoin() {
   $("buzzer-card").classList.add("hidden");
   $("join-card").classList.remove("hidden");
   $("join-code").value = sessionCode;
-  $("team-name").value = teamName;
+  loadTeamsForCode();
   $("student-name").value = studentName;
 }
 
@@ -211,6 +211,27 @@ function currentClue() {
 
 function myTeam() {
   return state?.teams?.find((team) => team.name === teamName) || null;
+}
+
+async function loadTeamsForCode() {
+  const code = $("join-code").value.trim().toUpperCase();
+  const select = $("team-name");
+  if (!code) {
+    select.innerHTML = teamName ? `<option value="${escapeHtml(teamName)}">${escapeHtml(teamName)}</option>` : "";
+    return;
+  }
+  const response = await fetch(`/api/game/${code}/teams`);
+  if (!response.ok) {
+    select.innerHTML = teamName ? `<option value="${escapeHtml(teamName)}">${escapeHtml(teamName)}</option>` : "";
+    return;
+  }
+  const data = await response.json();
+  select.innerHTML = (data.teams || [])
+    .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+    .join("");
+  if (teamName && [...select.options].some((option) => option.value === teamName)) {
+    select.value = teamName;
+  }
 }
 
 function finalWagerLimit() {
@@ -660,8 +681,10 @@ async function submitFinalAnswer() {
 }
 
 $("join-code").value = sessionCode;
-$("team-name").value = teamName;
 $("student-name").value = studentName;
+loadTeamsForCode();
+$("join-code").addEventListener("change", loadTeamsForCode);
+$("join-code").addEventListener("blur", loadTeamsForCode);
 
 $("join-game").addEventListener("click", async () => {
   sessionCode = $("join-code").value.trim().toUpperCase();

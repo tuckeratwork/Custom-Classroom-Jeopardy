@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import secrets
+import base64
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +22,7 @@ from .game import (
     load_game_config,
     lock_daily_double_wager,
     public_state,
+    remove_student,
     reset_buzzer,
     reveal_final,
     score_current_clue,
@@ -42,6 +46,7 @@ from .models import (
     SelectClueRequest,
     SessionRequest,
     StartGameRequest,
+    StudentRequest,
 )
 from .realtime import ConnectionManager
 from .store import GameStore
@@ -53,6 +58,67 @@ templates = Jinja2Templates(directory="app/templates")
 
 store = GameStore(os.getenv("JEOPARDY_DB", "jeopardy.db"))
 manager = ConnectionManager()
+
+
+def teacher_accounts() -> dict[str, str]:
+    raw = os.getenv("JEOPARDY_TEACHERS", "teacher:jeopardy")
+    accounts: dict[str, str] = {}
+    for item in raw.split(","):
+        if ":" not in item:
+            continue
+        username, password = item.split(":", 1)
+        username = username.strip()
+        password = password.strip()
+        if username:
+            accounts[username] = password
+    return accounts or {"teacher": "jeopardy"}
+
+
+def parse_basic_auth(authorization: str | None) -> tuple[str, str] | None:
+    if not authorization:
+        return None
+    scheme, _, encoded = authorization.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return None
+    try:
+        decoded = base64.b64decode(encoded.strip()).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if ":" not in decoded:
+        return None
+    username, password = decoded.split(":", 1)
+    return username, password
+
+
+def validate_teacher_authorization(authorization: str | None) -> str | None:
+    parsed = parse_basic_auth(authorization)
+    if parsed is None:
+        return None
+    username, password = parsed
+    accounts = teacher_accounts()
+    expected = accounts.get(username)
+    valid = expected is not None and secrets.compare_digest(password, expected)
+    return username if valid else None
+
+
+async def current_teacher(authorization: str | None = Header(default=None)) -> str:
+    teacher = validate_teacher_authorization(authorization)
+    if teacher is None:
+        raise HTTPException(
+            status_code=401,
+            detail="teacher login required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return teacher
+
+
+def game_files() -> list[str]:
+    games_dir = Path("games")
+    return sorted(
+        str(path)
+        for path in games_dir.glob("*.yaml")
+        if path.is_file()
+    )
 
 
 def not_found(session_code: str) -> HTTPException:
@@ -76,7 +142,7 @@ async def root() -> RedirectResponse:
 
 
 @app.get("/teacher", response_class=HTMLResponse)
-async def teacher_page(request: Request) -> HTMLResponse:
+async def teacher_page(request: Request, teacher: str = Depends(current_teacher)) -> HTMLResponse:
     return templates.TemplateResponse("teacher.html", {"request": request})
 
 
@@ -91,50 +157,61 @@ async def student_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/board", response_class=HTMLResponse)
-async def board_page(request: Request) -> HTMLResponse:
+async def board_page(request: Request, teacher: str = Depends(current_teacher)) -> HTMLResponse:
     return templates.TemplateResponse("board.html", {"request": request})
 
 
 @app.get("/api/game/latest")
-async def latest_game() -> dict:
-    state = store.latest()
+async def latest_game(teacher: str = Depends(current_teacher)) -> dict:
+    state = store.latest(teacher)
     if not state:
         raise HTTPException(status_code=404, detail="no game has been started")
     return public_state(state, reveal_answers=True)
 
 
+@app.get("/api/game/configs")
+async def list_game_configs(teacher: str = Depends(current_teacher)) -> dict:
+    return {"configs": game_files()}
+
+
 @app.get("/api/game/{session_code}")
-async def get_game(session_code: str, teacher: bool = False) -> dict:
+async def get_game(
+    session_code: str,
+    teacher: bool = False,
+    authorization: str | None = Header(default=None),
+) -> dict:
     try:
         state = store.get(session_code)
     except KeyError as exc:
         raise not_found(session_code) from exc
+    if teacher and validate_teacher_authorization(authorization) is None:
+        raise HTTPException(
+            status_code=401,
+            detail="teacher login required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     return public_state(state, reveal_answers=teacher)
 
 
 @app.post("/api/game/start")
-async def start_game(payload: StartGameRequest) -> dict:
-    previous_session_code = payload.previous_session_code.upper() if payload.previous_session_code else None
-    if previous_session_code is None:
-        previous_state = store.latest()
-        previous_session_code = previous_state.session_code if previous_state else None
+async def start_game(payload: StartGameRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         config = load_game_config(payload.config_path)
-        state = create_game_state(config)
+        state = create_game_state(config, team_names=payload.team_names, owner_name=teacher)
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save(state)
-    if previous_session_code and previous_session_code != state.session_code:
-        await manager.broadcast_all(
-            {
-                "type": "session_reset",
-                "new_session_code": state.session_code,
-            },
-            exclude={state.session_code},
-        )
-        store.delete(previous_session_code)
     await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
+
+
+@app.get("/api/game/{session_code}/teams")
+async def game_teams(session_code: str) -> dict:
+    try:
+        state = store.get(session_code)
+    except KeyError as exc:
+        raise not_found(session_code) from exc
+    return {"teams": [team.name for team in state.teams], "title": state.title}
 
 
 @app.post("/api/join")
@@ -172,7 +249,7 @@ async def buzz_route(payload: BuzzRequest) -> dict:
 
 
 @app.post("/api/clue/select")
-async def select_clue_route(payload: SelectClueRequest) -> dict:
+async def select_clue_route(payload: SelectClueRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -187,7 +264,7 @@ async def select_clue_route(payload: SelectClueRequest) -> dict:
 
 
 @app.post("/api/clue/score")
-async def score_clue_route(payload: ScoreClueRequest) -> dict:
+async def score_clue_route(payload: ScoreClueRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -207,7 +284,7 @@ async def score_clue_route(payload: ScoreClueRequest) -> dict:
 
 
 @app.post("/api/clue/continue")
-async def continue_clue_route(payload: SessionRequest) -> dict:
+async def continue_clue_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, continue_current_clue)
     except KeyError as exc:
@@ -219,7 +296,7 @@ async def continue_clue_route(payload: SessionRequest) -> dict:
 
 
 @app.post("/api/daily-double/wager")
-async def daily_double_wager_route(payload: DailyDoubleWagerRequest) -> dict:
+async def daily_double_wager_route(payload: DailyDoubleWagerRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -238,7 +315,7 @@ async def daily_double_wager_route(payload: DailyDoubleWagerRequest) -> dict:
 
 
 @app.post("/api/buzzer/reset")
-async def reset_buzzer_route(payload: SessionRequest) -> dict:
+async def reset_buzzer_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, reset_buzzer)
     except KeyError as exc:
@@ -248,7 +325,7 @@ async def reset_buzzer_route(payload: SessionRequest) -> dict:
 
 
 @app.post("/api/scores")
-async def set_scores_route(payload: ScoreOverrideRequest) -> dict:
+async def set_scores_route(payload: ScoreOverrideRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -262,8 +339,23 @@ async def set_scores_route(payload: ScoreOverrideRequest) -> dict:
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/students/remove")
+async def remove_student_route(payload: StudentRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: remove_student(current, payload.team_name, payload.student_name),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
 @app.post("/api/final/reveal")
-async def reveal_final_route(payload: SessionRequest) -> dict:
+async def reveal_final_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, reveal_final)
     except KeyError as exc:
@@ -273,7 +365,7 @@ async def reveal_final_route(payload: SessionRequest) -> dict:
 
 
 @app.post("/api/final/wagers")
-async def final_wagers_route(payload: FinalWagersRequest) -> dict:
+async def final_wagers_route(payload: FinalWagersRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -328,7 +420,7 @@ async def final_answer_route(payload: FinalAnswerRequest) -> dict:
 
 
 @app.post("/api/final/score")
-async def final_score_route(payload: FinalScoreRequest) -> dict:
+async def final_score_route(payload: FinalScoreRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(
             payload.session_code,
@@ -343,7 +435,7 @@ async def final_score_route(payload: FinalScoreRequest) -> dict:
 
 
 @app.post("/api/final/calculate")
-async def final_calculate_route(payload: SessionRequest) -> dict:
+async def final_calculate_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, calculate_final_winners)
     except KeyError as exc:
@@ -365,7 +457,7 @@ async def final_advance_route(payload: SessionRequest) -> dict:
 
 
 @app.post("/api/final/reveal-next")
-async def final_reveal_next_route(payload: SessionRequest) -> dict:
+async def final_reveal_next_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, advance_final_reveal)
     except KeyError as exc:

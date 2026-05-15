@@ -148,6 +148,7 @@ function sessionCode() {
 async function api(path, body) {
   const response = await fetch(path, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -161,7 +162,7 @@ async function api(path, body) {
 }
 
 async function fetchTeacherState(code) {
-  const response = await fetch(`/api/game/${code}?teacher=true`);
+  const response = await fetch(`/api/game/${code}?teacher=true`, { credentials: "include" });
   if (!response.ok) {
     return;
   }
@@ -186,11 +187,55 @@ function render() {
   $("session-code").textContent = state.session_code;
   renderBoard();
   renderScores();
+  renderStudentRoster();
   renderControls();
   renderFinal();
   renderTimer();
   renderScoreEvent();
   handleAudioState();
+}
+
+function defaultTeamName(index) {
+  const names = ["Red Team", "Blue Team", "Green Team", "Gold Team", "Purple Team", "Orange Team", "Black Team", "White Team", "Silver Team", "Teal Team"];
+  return names[index] || `Team ${index + 1}`;
+}
+
+function renderTeamNameFields() {
+  const count = Math.max(2, Math.min(10, Number($("team-count").value || 2)));
+  $("team-count").value = count;
+  const container = $("team-name-fields");
+  const existing = Array.from(container.querySelectorAll("[data-team-name-input]")).map((input) => input.value);
+  container.innerHTML = "";
+  for (let index = 0; index < count; index += 1) {
+    const label = document.createElement("label");
+    label.textContent = `Team ${index + 1}`;
+    const input = document.createElement("input");
+    input.dataset.teamNameInput = String(index);
+    input.value = existing[index] || defaultTeamName(index);
+    label.appendChild(input);
+    container.appendChild(label);
+  }
+}
+
+function teamNamesFromFields() {
+  return Array.from(document.querySelectorAll("[data-team-name-input]"))
+    .map((input) => input.value.trim())
+    .filter(Boolean);
+}
+
+async function loadGameConfigs() {
+  const select = $("config-path");
+  const response = await fetch("/api/game/configs", { credentials: "include" });
+  if (!response.ok) {
+    select.innerHTML = `<option value="games/example.yaml">games/example.yaml</option>`;
+    return;
+  }
+  const data = await response.json();
+  const configs = data.configs?.length ? data.configs : ["games/example.yaml"];
+  select.innerHTML = configs.map((path) => `<option value="${escapeHtml(path)}">${escapeHtml(path)}</option>`).join("");
+  if (configs.includes("games/cna_modules_1_5.yaml")) {
+    select.value = "games/cna_modules_1_5.yaml";
+  }
 }
 
 function renderBoard() {
@@ -268,6 +313,33 @@ function renderScores() {
   }
 
   lastScores = Object.fromEntries(state.teams.map((team) => [team.name, displayScore(team)]));
+}
+
+function renderStudentRoster() {
+  const roster = $("student-roster");
+  if (!roster) {
+    return;
+  }
+  roster.innerHTML = "";
+  state.teams.forEach((team) => {
+    const group = document.createElement("div");
+    group.className = "student-roster-team";
+    group.innerHTML = `<h3>${escapeHtml(team.name)} (${team.students?.length || 0})</h3>`;
+    if (!team.students?.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No students joined.";
+      group.appendChild(empty);
+    } else {
+      team.students.forEach((student) => {
+        const row = document.createElement("div");
+        row.className = "student-roster-row";
+        row.innerHTML = `<span>${escapeHtml(student)}</span><button class="secondary" data-remove-student="${escapeHtml(student)}" data-remove-team="${escapeHtml(team.name)}">Remove</button>`;
+        group.appendChild(row);
+      });
+    }
+    roster.appendChild(group);
+  });
 }
 
 async function saveScoreOverrides() {
@@ -604,14 +676,19 @@ async function selectClue(clueId) {
 $("start-game").addEventListener("click", async () => {
   const code = sessionCode();
   const message = code && code !== "-----"
-    ? `Reset the game and create a new room code? Current students will need to rejoin with the new code.`
+    ? `Start a new game and create a new room code? Current students will need to join the new code.`
     : "Create a new game room?";
   if (!window.confirm(message)) {
     return;
   }
+  const teamNames = teamNamesFromFields();
+  if (teamNames.length < 2 || teamNames.length > 10) {
+    window.alert("Enter between 2 and 10 team names.");
+    return;
+  }
   const data = await api("/api/game/start", {
     config_path: $("config-path").value,
-    previous_session_code: code && code !== "-----" ? code : null,
+    team_names: teamNames,
   });
   connectSocket(data.session_code);
 });
@@ -623,7 +700,7 @@ $("refresh-game").addEventListener("click", async () => {
     connectSocket(code);
     return;
   }
-  const response = await fetch("/api/game/latest");
+  const response = await fetch("/api/game/latest", { credentials: "include" });
   if (response.ok) {
     state = await response.json();
     render();
@@ -661,6 +738,25 @@ $("save-scores").addEventListener("click", () => {
   saveScoreOverrides();
 });
 
+$("student-roster").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-remove-student]");
+  if (!button) {
+    return;
+  }
+  const student = button.dataset.removeStudent;
+  const team = button.dataset.removeTeam;
+  if (!window.confirm(`Remove ${student} from ${team}?`)) {
+    return;
+  }
+  api("/api/students/remove", {
+    session_code: sessionCode(),
+    team_name: team,
+    student_name: student,
+  });
+});
+
+$("team-count").addEventListener("change", renderTeamNameFields);
+
 $("lock-daily-double").addEventListener("click", () => {
   api("/api/daily-double/wager", {
     session_code: sessionCode(),
@@ -694,7 +790,10 @@ $("next-final-reveal").addEventListener("click", () => {
   api("/api/final/reveal-next", { session_code: sessionCode() });
 });
 
-fetch("/api/game/latest")
+renderTeamNameFields();
+loadGameConfigs();
+
+fetch("/api/game/latest", { credentials: "include" })
   .then((response) => (response.ok ? response.json() : null))
   .then((data) => {
     if (data) {

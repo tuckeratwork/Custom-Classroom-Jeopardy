@@ -6,6 +6,9 @@ from app import main
 from app.store import GameStore
 
 
+AUTH = ("teacher", "jeopardy")
+
+
 def use_test_store(tmp_path, monkeypatch) -> None:
     test_store = GameStore(tmp_path / "test.db")
     monkeypatch.setattr(main, "store", test_store)
@@ -19,7 +22,8 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             start_response = await client.post(
                 "/api/game/start",
-                json={"config_path": "games/example.yaml"},
+                json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                auth=AUTH,
             )
             assert start_response.status_code == 200
             state = start_response.json()
@@ -40,6 +44,7 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
             select_response = await client.post(
                 "/api/clue/select",
                 json={"session_code": code, "clue_id": clue["id"], "selecting_team": "Red Team"},
+                auth=AUTH,
             )
             assert select_response.status_code == 200
 
@@ -54,6 +59,7 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
             score_response = await client.post(
                 "/api/clue/score",
                 json={"session_code": code, "correct": True, "team_name": "Red Team"},
+                auth=AUTH,
             )
             assert score_response.status_code == 200
             scores = {team["name"]: team["score"] for team in score_response.json()["teams"]}
@@ -69,12 +75,16 @@ def test_student_state_hides_answers(tmp_path, monkeypatch) -> None:
         transport = ASGITransport(app=main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             state = (
-                await client.post("/api/game/start", json={"config_path": "games/example.yaml"})
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                    auth=AUTH,
+                )
             ).json()
             code = state["session_code"]
 
             student_state = (await client.get(f"/api/game/{code}")).json()
-            teacher_state = (await client.get(f"/api/game/{code}?teacher=true")).json()
+            teacher_state = (await client.get(f"/api/game/{code}?teacher=true", auth=AUTH)).json()
 
         assert "answer" not in student_state["categories"][0]["clues"][0]
         assert "answer" in teacher_state["categories"][0]["clues"][0]
@@ -82,25 +92,30 @@ def test_student_state_hides_answers(tmp_path, monkeypatch) -> None:
     asyncio.run(scenario())
 
 
-def test_reset_invalidates_previous_session(tmp_path, monkeypatch) -> None:
+def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None:
     use_test_store(tmp_path, monkeypatch)
 
     async def scenario() -> None:
         transport = ASGITransport(app=main.app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             first = (
-                await client.post("/api/game/start", json={"config_path": "games/example.yaml"})
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                    auth=AUTH,
+                )
             ).json()
             old_code = first["session_code"]
 
             reset_response = await client.post(
                 "/api/game/start",
-                json={"config_path": "games/example.yaml", "previous_session_code": old_code},
+                json={"config_path": "games/example.yaml", "team_names": ["Green Team", "Gold Team"]},
+                auth=AUTH,
             )
             assert reset_response.status_code == 200
             assert reset_response.json()["session_code"] != old_code
 
             old_response = await client.get(f"/api/game/{old_code}")
-            assert old_response.status_code == 404
+            assert old_response.status_code == 200
 
     asyncio.run(scenario())

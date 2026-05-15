@@ -96,7 +96,7 @@ function ordinal(value) {
 }
 
 async function fetchLatest() {
-  const response = await fetch("/api/game/latest");
+  const response = await fetch("/api/game/latest", { credentials: "include" });
   if (!response.ok) {
     return;
   }
@@ -106,7 +106,7 @@ async function fetchLatest() {
 }
 
 async function fetchState(code) {
-  const response = await fetch(`/api/game/${code}?teacher=true`);
+  const response = await fetch(`/api/game/${code}?teacher=true`, { credentials: "include" });
   if (!response.ok) {
     return;
   }

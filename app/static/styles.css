@@ -170,9 +170,45 @@ textarea {
 
 .actions {
   display: grid;
-  grid-template-columns: auto minmax(220px, 360px) auto auto;
+  grid-template-columns: auto minmax(220px, 360px) auto 84px auto auto;
   gap: 10px;
   margin-bottom: 16px;
+  align-items: center;
+}
+
+.compact-field {
+  margin: 0;
+}
+
+.team-name-fields,
+.student-roster {
+  display: grid;
+  gap: 8px;
+}
+
+.team-name-fields {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0 0 16px;
+}
+
+.student-roster-team {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #101822;
+}
+
+.student-roster-team h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.student-roster-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .board {

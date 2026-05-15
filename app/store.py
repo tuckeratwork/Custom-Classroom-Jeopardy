@@ -55,11 +55,24 @@ class GameStore:
             raise KeyError(session_code)
         return GameState.model_validate(json.loads(row[0]))
 
-    def latest(self) -> Optional[GameState]:
+    def latest(self, owner_name: str | None = None) -> Optional[GameState]:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT state_json FROM sessions ORDER BY updated_at DESC LIMIT 1"
-            ).fetchone()
+            if owner_name is None:
+                row = conn.execute(
+                    "SELECT state_json FROM sessions ORDER BY updated_at DESC LIMIT 1"
+                ).fetchone()
+            else:
+                rows = conn.execute(
+                    "SELECT state_json FROM sessions ORDER BY updated_at DESC"
+                ).fetchall()
+                row = next(
+                    (
+                        item
+                        for item in rows
+                        if GameState.model_validate(json.loads(item[0])).owner_name == owner_name
+                    ),
+                    None,
+                )
         if row is None:
             return None
         return GameState.model_validate(json.loads(row[0]))

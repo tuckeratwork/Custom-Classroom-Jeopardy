@@ -45,7 +45,24 @@ def generate_session_code(length: int = 5) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def create_game_state(config: GameConfig, session_code: Optional[str] = None) -> GameState:
+def normalize_team_names(team_names: list[str]) -> list[str]:
+    names = [" ".join(name.strip().split()) for name in team_names]
+    names = [name for name in names if name]
+    if len(names) < 2 or len(names) > 10:
+        raise GameError("games require between 2 and 10 teams")
+    normalized = [name.lower() for name in names]
+    if len(set(normalized)) != len(normalized):
+        raise GameError("team names must be unique")
+    return names
+
+
+def create_game_state(
+    config: GameConfig,
+    session_code: Optional[str] = None,
+    team_names: Optional[list[str]] = None,
+    owner_name: Optional[str] = None,
+) -> GameState:
+    teams = normalize_team_names(team_names if team_names is not None else config.teams)
     categories = []
     clue_ids = []
     for category_index, category in enumerate(config.categories):
@@ -73,7 +90,8 @@ def create_game_state(config: GameConfig, session_code: Optional[str] = None) ->
     return GameState(
         session_code=session_code or generate_session_code(),
         title=config.title,
-        teams=[TeamState(name=name) for name in config.teams],
+        owner_name=owner_name,
+        teams=[TeamState(name=name) for name in teams],
         categories=categories,
         final=FinalState(
             category=config.final.category,
@@ -211,6 +229,28 @@ def join_team(state: GameState, team_name: str, student_name: str = "") -> GameS
     if student.lower() not in existing:
         team.students.append(student)
     team.correct_counts.setdefault(student, 0)
+    return state
+
+
+def remove_student(state: GameState, team_name: str, student_name: str) -> GameState:
+    team = find_team(state, team_name)
+    student = normalize_student_name(student_name)
+    team.students = [name for name in team.students if name.lower() != student.lower()]
+    team.answered_students = [
+        name for name in team.answered_students if name.lower() != student.lower()
+    ]
+    team.correct_counts.pop(student, None)
+    for name in list(team.correct_counts):
+        if name.lower() == student.lower():
+            team.correct_counts.pop(name, None)
+    team.joined = bool(team.students)
+    if state.buzz_winner == team_name and (state.buzz_winner_student or "").lower() == student.lower():
+        state.buzz_winner = None
+        state.buzz_winner_student = None
+        state.buzz_expires_at = None
+    if state.last_buzz_team == team_name and (state.last_buzz_student or "").lower() == student.lower():
+        state.last_buzz_team = None
+        state.last_buzz_student = None
     return state
 
 

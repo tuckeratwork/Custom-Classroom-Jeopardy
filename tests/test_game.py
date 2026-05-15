@@ -11,6 +11,7 @@ from app.game import (
     create_game_state,
     join_team,
     load_game_config,
+    remove_student,
     reset_buzzer,
     reveal_final,
     score_current_clue,
@@ -28,6 +29,18 @@ def test_load_game_config() -> None:
     assert config.title == "Cybersecurity Jeopardy"
     assert len(config.teams) == 3
     assert config.final.answer == "Least privilege"
+
+
+def test_game_state_can_use_runtime_team_names() -> None:
+    state = create_game_state(
+        load_game_config("games/example.yaml"),
+        session_code="TEAMS",
+        team_names=["Alpha", "Beta", "Gamma"],
+        owner_name="teacher-a",
+    )
+
+    assert state.owner_name == "teacher-a"
+    assert [team.name for team in state.teams] == ["Alpha", "Beta", "Gamma"]
 
 
 def test_regular_scoring_and_buzzer_lockout() -> None:
@@ -286,6 +299,28 @@ def test_teacher_can_override_scores() -> None:
     assert scores["Red Team"] == 1200
     assert scores["Blue Team"] == -100
     assert scores["Purple Team"] == 0
+
+
+def test_teacher_can_remove_stale_student() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST16")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Red Team", "Ari")
+    select_clue(
+        state,
+        next(
+            clue.id
+            for category in state.categories
+            for clue in category.clues
+            if not clue.is_daily_double
+        ),
+    )
+    buzz(state, "Red Team", "Alice")
+
+    remove_student(state, "Red Team", "Alice")
+
+    red = next(team for team in state.teams if team.name == "Red Team")
+    assert red.students == ["Ari"]
+    assert state.buzz_winner is None
 
 
 def test_final_uses_joined_student_teams_only() -> None:
