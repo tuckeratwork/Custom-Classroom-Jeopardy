@@ -178,6 +178,30 @@ function handleSessionReset(newCode) {
   showJoin();
 }
 
+function handleSessionEnded(newCode) {
+  sessionCode = "";
+  teamName = "";
+  localStorage.removeItem("jeopardy_session");
+  localStorage.removeItem("jeopardy_team");
+  $("join-code").value = newCode || "";
+  $("join-error").textContent = newCode
+    ? "This game ended. Join the new game code when your teacher tells you to."
+    : "This game ended. Enter a new session code to join.";
+  showJoin();
+}
+
+function handleStudentRemoved(message) {
+  if (
+    message.team_name === teamName
+    && String(message.student_name || "").toLowerCase() === studentName.toLowerCase()
+  ) {
+    localStorage.removeItem("jeopardy_session");
+    localStorage.removeItem("jeopardy_team");
+    $("join-error").textContent = "You were removed from that game. Ask your teacher before rejoining.";
+    showJoin();
+  }
+}
+
 function connectSocket() {
   if (socket) {
     socket.close();
@@ -191,6 +215,10 @@ function connectSocket() {
       render();
     } else if (message.type === "session_reset") {
       handleSessionReset(message.new_session_code);
+    } else if (message.type === "session_ended") {
+      handleSessionEnded(message.new_session_code);
+    } else if (message.type === "student_removed") {
+      handleStudentRemoved(message);
     }
   };
 }
@@ -544,6 +572,15 @@ async function advanceFinalIfExpired() {
 
 function render() {
   if (!state) {
+    return;
+  }
+  const team = myTeam();
+  const stillJoined = team?.students?.some((name) => name.toLowerCase() === studentName.toLowerCase());
+  if (teamName && studentName && state.teams?.length && !stillJoined) {
+    localStorage.removeItem("jeopardy_session");
+    localStorage.removeItem("jeopardy_team");
+    $("join-error").textContent = "You are no longer joined to that game.";
+    showJoin();
     return;
   }
   const clue = currentClue();

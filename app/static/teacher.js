@@ -185,6 +185,7 @@ function render() {
   }
   $("game-title").textContent = state.title;
   $("session-code").textContent = state.session_code;
+  $("presentation-link").href = `/board?session=${encodeURIComponent(state.session_code)}`;
   renderBoard();
   renderScores();
   renderStudentRoster();
@@ -322,9 +323,10 @@ function renderStudentRoster() {
   }
   roster.innerHTML = "";
   state.teams.forEach((team) => {
-    const group = document.createElement("div");
+    const group = document.createElement("details");
     group.className = "student-roster-team";
-    group.innerHTML = `<h3>${escapeHtml(team.name)} (${team.students?.length || 0})</h3>`;
+    group.open = Boolean(team.students?.length);
+    group.innerHTML = `<summary>${escapeHtml(team.name)} (${team.students?.length || 0})</summary>`;
     if (!team.students?.length) {
       const empty = document.createElement("p");
       empty.className = "muted";
@@ -689,6 +691,7 @@ $("start-game").addEventListener("click", async () => {
   const data = await api("/api/game/start", {
     config_path: $("config-path").value,
     team_names: teamNames,
+    previous_session_code: code && code !== "-----" ? code : null,
   });
   connectSocket(data.session_code);
 });

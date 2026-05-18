@@ -195,12 +195,19 @@ async def get_game(
 
 @app.post("/api/game/start")
 async def start_game(payload: StartGameRequest, teacher: str = Depends(current_teacher)) -> dict:
+    previous_session_code = payload.previous_session_code.upper() if payload.previous_session_code else None
     try:
         config = load_game_config(payload.config_path)
         state = create_game_state(config, team_names=payload.team_names, owner_name=teacher)
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save(state)
+    if previous_session_code and previous_session_code != state.session_code:
+        await manager.broadcast(
+            previous_session_code,
+            {"type": "session_ended", "new_session_code": state.session_code},
+        )
+        store.delete(previous_session_code)
     await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
 
@@ -351,6 +358,14 @@ async def remove_student_route(payload: StudentRequest, teacher: str = Depends(c
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await broadcast_state(state.session_code)
+    await manager.broadcast(
+        state.session_code,
+        {
+            "type": "student_removed",
+            "team_name": payload.team_name,
+            "student_name": payload.student_name,
+        },
+    )
     return public_state(state, reveal_answers=True)
 
 

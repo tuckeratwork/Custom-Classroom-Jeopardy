@@ -198,9 +198,14 @@ textarea {
   background: #101822;
 }
 
-.student-roster-team h3 {
-  margin: 0 0 8px;
+.student-roster-team summary {
+  cursor: pointer;
   font-size: 15px;
+  font-weight: 900;
+}
+
+.student-roster-team[open] summary {
+  margin-bottom: 8px;
 }
 
 .student-roster-row {

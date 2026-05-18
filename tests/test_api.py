@@ -109,13 +109,17 @@ def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None
 
             reset_response = await client.post(
                 "/api/game/start",
-                json={"config_path": "games/example.yaml", "team_names": ["Green Team", "Gold Team"]},
+                json={
+                    "config_path": "games/example.yaml",
+                    "team_names": ["Green Team", "Gold Team"],
+                    "previous_session_code": old_code,
+                },
                 auth=AUTH,
             )
             assert reset_response.status_code == 200
             assert reset_response.json()["session_code"] != old_code
 
             old_response = await client.get(f"/api/game/{old_code}")
-            assert old_response.status_code == 200
+            assert old_response.status_code == 404
 
     asyncio.run(scenario())

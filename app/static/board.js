@@ -96,6 +96,15 @@ function ordinal(value) {
 }
 
 async function fetchLatest() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("session");
+  if (code) {
+    await fetchState(code.toUpperCase());
+    if (state?.session_code) {
+      connectSocket(state.session_code);
+    }
+    return;
+  }
   const response = await fetch("/api/game/latest", { credentials: "include" });
   if (!response.ok) {
     return;
