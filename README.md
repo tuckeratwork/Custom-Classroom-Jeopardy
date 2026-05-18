@@ -15,6 +15,22 @@ python3 -m venv .venv
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+## Teacher Accounts
+
+Teacher pages and teacher-only actions require login. If no accounts are configured, the default development login is:
+
+```text
+teacher / jeopardy
+```
+
+To add one or more teacher accounts, set `JEOPARDY_TEACHERS` before starting the app. Use comma-separated `username:password` pairs:
+
+```bash
+JEOPARDY_TEACHERS="alice:password1,bob:password2" .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Each teacher account can run its own game session.
+
 Teacher view:
 
 ```text
