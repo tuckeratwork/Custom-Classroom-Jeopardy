@@ -7,6 +7,7 @@ let audioContext = null;
 let hasSeenScoreState = false;
 let lastPresentedClueId = null;
 let confettiSignature = null;
+let autoRandomAdvanceInFlight = false;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -195,10 +196,11 @@ function renderClue() {
   const board = $("board-clue");
   if (state.phase?.startsWith("final")) {
     board.classList.add("presentation-clue-card-open");
+    const hidden = state.final.phase === "pending" || state.final.phase === "wager";
     board.innerHTML = `
       <p class="eyebrow">Final Jeopardy</p>
-      <h2>${escapeHtml(state.final.category)}</h2>
-      <p>${state.final.revealed ? escapeHtml(state.final.prompt) : "Wagers are being locked in."}</p>
+      <h2>${hidden ? "Wagers are being locked in." : escapeHtml(state.final.category)}</h2>
+      <p>${hidden ? "Category and prompt hidden." : (state.final.revealed ? escapeHtml(state.final.prompt) : "Prompt hidden.")}</p>
     `;
     return;
   }
@@ -228,8 +230,41 @@ function renderClue() {
   board.innerHTML = `
     <p class="eyebrow">${clue.is_daily_double ? "Daily Double" : `$${clue.value}`}</p>
     <h2>${dailyDoubleHidden ? "Wager pending" : escapeHtml(clue.prompt)}</h2>
+    ${autoRandomCountdownMarkup()}
     ${showAnswer && !dailyDoubleHidden ? `<div class="presentation-answer">${escapeHtml(clue.answer)}</div>` : ""}
   `;
+}
+
+function autoRandomCountdownMarkup() {
+  if (!state.auto_random_expires_at || state.buzz_winner) {
+    return "";
+  }
+  const remaining = Math.max(0, Math.ceil(state.auto_random_expires_at - Date.now() / 1000));
+  return `<div class="presentation-auto-random">Random buzz in ${remaining}</div>`;
+}
+
+async function advanceAutoRandomIfExpired() {
+  if (!state || autoRandomAdvanceInFlight || !state.auto_random_expires_at) {
+    return;
+  }
+  if (Date.now() / 1000 < state.auto_random_expires_at) {
+    return;
+  }
+  autoRandomAdvanceInFlight = true;
+  try {
+    const response = await fetch("/api/buzzer/auto-random/advance", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_code: state.session_code }),
+    });
+    if (response.ok) {
+      state = await response.json();
+      render();
+    }
+  } finally {
+    autoRandomAdvanceInFlight = false;
+  }
 }
 
 function maybeRevealAnswer() {
@@ -375,5 +410,8 @@ function render() {
   renderWinnerReveal();
 }
 
-window.setInterval(renderClue, 250);
+window.setInterval(() => {
+  renderClue();
+  advanceAutoRandomIfExpired();
+}, 250);
 fetchLatest();

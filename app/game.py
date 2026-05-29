@@ -24,6 +24,7 @@ from .models import (
 FINAL_WAGER_SECONDS = 60
 FINAL_ANSWER_SECONDS = 300
 DAILY_DOUBLE_ANSWER_SECONDS = 60
+AUTO_RANDOM_SECONDS = 15
 
 
 class GameError(ValueError):
@@ -135,6 +136,9 @@ def public_state(state: GameState, reveal_answers: bool = False) -> dict:
             for clue in category["clues"]:
                 clue.pop("answer", None)
         payload["final"].pop("answer", None)
+        if payload["final"].get("phase") in {"pending", "wager"}:
+            payload["final"]["category"] = "Final Jeopardy"
+            payload["final"]["prompt"] = ""
         active_teams = active_final_team_names(state)
         if len(payload["final"]["wagers"]) < len(active_teams):
             payload["final"]["wagers"] = {}
@@ -180,6 +184,7 @@ def start_final_wager_phase(state: GameState) -> GameState:
     state.buzz_winner = None
     state.buzz_winner_student = None
     state.buzz_expires_at = None
+    state.auto_random_expires_at = None
     state.buzz_order = []
     state.steal_eligible = False
     state.steal_active = False
@@ -273,6 +278,7 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
     state.buzz_winner_student = None
     state.buzz_expires_at = None
     state.buzz_order = []
+    state.auto_random_expires_at = None
     state.steal_eligible = False
     state.steal_active = False
     state.steal_lockout_team = None
@@ -288,6 +294,8 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
         state.daily_double.wager = None
         state.daily_double.question_revealed = False
         state.daily_double.answer_expires_at = None
+        if state.auto_random_enabled:
+            state.auto_random_expires_at = time.time() + AUTO_RANDOM_SECONDS
     return state
 
 
@@ -337,9 +345,74 @@ def buzz(state: GameState, team_name: str, student_name: str = "") -> GameState:
         state.buzz_winner = team_name
         state.buzz_winner_student = student
         state.buzz_expires_at = time.time() + 10
+        state.auto_random_expires_at = None
         state.last_buzz_team = team_name
         state.last_buzz_student = student
     return state
+
+
+def eligible_buzzers(state: GameState) -> list[tuple[str, str]]:
+    if state.phase != "board" or not state.current_clue_id or state.daily_double.active:
+        return []
+    if state.buzz_winner:
+        return []
+    eligible: list[tuple[str, str]] = []
+    for team in state.teams:
+        if state.steal_active and team.name == state.steal_lockout_team:
+            continue
+        if not team.students:
+            continue
+        if state.steal_active or len(team.answered_students) >= len(team.students):
+            students = team.students
+        else:
+            answered = {name.lower() for name in team.answered_students}
+            students = [student for student in team.students if student.lower() not in answered]
+        eligible.extend((team.name, student) for student in students)
+    return eligible
+
+
+def reset_buzzer_rotation(state: GameState) -> GameState:
+    for team in state.teams:
+        team.answered_students = []
+    return reset_buzzer(state)
+
+
+def random_buzz_eligible(state: GameState) -> GameState:
+    choices = eligible_buzzers(state)
+    if not choices:
+        raise GameError("no eligible students can buzz right now")
+    team_name, student = random.choice(choices)
+    state.buzz_winner = team_name
+    state.buzz_winner_student = student
+    state.buzz_expires_at = time.time() + 10
+    state.auto_random_expires_at = None
+    state.last_buzz_team = team_name
+    state.last_buzz_student = student
+    state.buzz_order = [team_name]
+    return state
+
+
+def set_auto_random(state: GameState, enabled: bool) -> GameState:
+    state.auto_random_enabled = enabled
+    state.auto_random_expires_at = None
+    if enabled and state.current_clue_id and not state.buzz_winner and not state.daily_double.active:
+        state.auto_random_expires_at = time.time() + AUTO_RANDOM_SECONDS
+    return state
+
+
+def advance_auto_random(state: GameState) -> GameState:
+    if not state.auto_random_enabled or not state.auto_random_expires_at:
+        return state
+    if time.time() < state.auto_random_expires_at:
+        return state
+    if state.buzz_winner or state.daily_double.active or not state.current_clue_id:
+        state.auto_random_expires_at = None
+        return state
+    try:
+        return random_buzz_eligible(state)
+    except GameError:
+        state.auto_random_expires_at = None
+        return state
 
 
 def reset_buzzer(state: GameState) -> GameState:
@@ -356,6 +429,7 @@ def finish_current_clue(state: GameState, clue: ClueState) -> None:
     state.buzz_winner = None
     state.buzz_winner_student = None
     state.buzz_expires_at = None
+    state.auto_random_expires_at = None
     state.buzz_order = []
     state.steal_eligible = False
     state.steal_active = False

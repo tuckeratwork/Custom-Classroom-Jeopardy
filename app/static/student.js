@@ -376,6 +376,7 @@ function renderFinalAction() {
   if (phase === "wager") {
     action.innerHTML = `
       <h2>Final Jeopardy</h2>
+      <p>Lock your wager before the category and prompt are revealed.</p>
       <p class="muted">Team leader: ${escapeHtml(leader || "Waiting for leader")}</p>
       <p id="student-final-countdown" class="final-countdown">${countdownText(state.final.wager_expires_at)}</p>
       ${teamScore < 500 ? `<p class="notice-text">Your team has less than $500, so you may wager up to $500.</p>` : ""}

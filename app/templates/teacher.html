@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Teacher Jeopardy Board</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260515-session3">
+    <link rel="stylesheet" href="/static/styles.css?v=20260528-autopick1">
   </head>
   <body data-role="teacher">
     <header class="topbar">
@@ -32,22 +32,14 @@
 
       <aside class="control-panel">
         <section>
-          <h2>Scores</h2>
-          <div id="scores" class="scores"></div>
-          <div class="button-row">
-            <button id="save-scores" class="secondary">Save score changes</button>
-          </div>
-        </section>
-
-        <section>
-          <h2>Students</h2>
-          <div id="student-roster" class="student-roster"></div>
-        </section>
-
-        <section>
           <h2>Current clue</h2>
           <div id="current-clue" class="current-clue muted">No clue selected.</div>
           <div id="buzz-status" class="buzz-status"></div>
+          <div id="rotation-status" class="rotation-status"></div>
+          <label class="auto-random-toggle">
+            <input id="auto-random-toggle" type="checkbox">
+            Auto-random eligible student after 15 seconds
+          </label>
           <div id="buzz-timer" class="buzz-timer hidden">10</div>
           <div class="field-row">
             <label for="score-team">Team</label>
@@ -63,6 +55,16 @@
             <button id="score-wrong" class="danger">Wrong</button>
             <button id="continue-clue" class="secondary">Continue</button>
             <button id="reset-buzzer" class="secondary">Reset buzzers</button>
+            <button id="reset-rotation" class="secondary">Clear student rotation</button>
+            <button id="random-buzz" class="secondary">Random eligible buzz</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Scores</h2>
+          <div id="scores" class="scores"></div>
+          <div class="button-row">
+            <button id="save-scores" class="secondary">Save score changes</button>
           </div>
         </section>
 
@@ -77,9 +79,14 @@
             <button id="next-final-reveal" class="secondary">Reveal Next Place</button>
           </div>
         </section>
+
+        <section>
+          <h2>Students</h2>
+          <div id="student-roster" class="student-roster"></div>
+        </section>
       </aside>
     </main>
 
-    <script src="/static/teacher.js?v=20260515-session3"></script>
+    <script src="/static/teacher.js?v=20260528-autopick1"></script>
   </body>
 </html>

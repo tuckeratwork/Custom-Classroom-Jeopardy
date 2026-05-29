@@ -82,6 +82,10 @@ The teacher console is the control room for the game.
 - **Wrong** marks the current buzz winner wrong. On a normal clue, points are deducted and the other teams can immediately buzz for one steal.
 - **Continue** ends the current clue without awarding additional points. Use it when no one steals or when you want to move on.
 - **Reset buzzers** only clears the current buzz winner and timer. It does not score, reveal, or change steal state.
+- **Clear student rotation** lets all joined students buzz again if the rotation creates a stalemate.
+- **Random eligible buzz** randomly selects one currently eligible student and buzzes in for them.
+- **Auto-random eligible student after 15 seconds** starts a presentation-board countdown when a normal clue is selected. If no student buzzes before it reaches zero, the app randomly buzzes one eligible student.
+- **Eligible to buzz** shows which students can currently buzz based on the team rotation and steal lockout rules.
 
 ## Normal Clues
 
@@ -103,6 +107,7 @@ The teacher selects the team, enters a wager, and presses **Lock wager**. The Da
 
 When all board clues are complete, the game moves into Final Jeopardy.
 
+- Before wagers are locked, the final category, prompt, and answer stay hidden.
 - **Start Final / Reveal Prompt** starts the wager phase, then reveals the final prompt when wagers are ready.
 - Student team leaders enter wagers and final answers from their devices.
 - **Override Wagers** lets the teacher manually adjust final wagers if needed.

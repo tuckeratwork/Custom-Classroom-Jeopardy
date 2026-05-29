@@ -397,6 +397,34 @@ body[data-role="teacher"] .score-row {
   font-weight: 800;
 }
 
+.rotation-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rotation-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #0f1720;
+  color: var(--accent-2);
+  font-weight: 800;
+}
+
+.auto-random-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .buzz-timer {
   display: grid;
   place-items: center;
@@ -681,6 +709,17 @@ body[data-role="teacher"] .score-row {
   border-top: 1px solid var(--line);
   padding-top: 18px;
   color: var(--accent-2);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.presentation-auto-random {
+  justify-self: center;
+  margin-top: 18px;
+  border: 3px solid var(--accent);
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: var(--accent);
   font-size: 30px;
   font-weight: 900;
 }

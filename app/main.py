@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from .game import (
     GameError,
+    advance_auto_random,
     advance_final_reveal,
     advance_final_timers,
     buzz,
@@ -22,18 +23,22 @@ from .game import (
     load_game_config,
     lock_daily_double_wager,
     public_state,
+    random_buzz_eligible,
     remove_student,
     reset_buzzer,
+    reset_buzzer_rotation,
     reveal_final,
     score_current_clue,
     score_final,
     select_clue,
+    set_auto_random,
     set_team_scores,
     set_final_wagers,
     submit_final_answer,
     submit_final_wager,
 )
 from .models import (
+    AutoRandomRequest,
     BuzzRequest,
     DailyDoubleWagerRequest,
     FinalAnswerRequest,
@@ -325,6 +330,51 @@ async def daily_double_wager_route(payload: DailyDoubleWagerRequest, teacher: st
 async def reset_buzzer_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, reset_buzzer)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/buzzer/reset-rotation")
+async def reset_buzzer_rotation_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(payload.session_code, reset_buzzer_rotation)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/buzzer/random")
+async def random_buzzer_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(payload.session_code, random_buzz_eligible)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/buzzer/auto-random")
+async def auto_random_route(payload: AutoRandomRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: set_auto_random(current, payload.enabled),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/buzzer/auto-random/advance")
+async def auto_random_advance_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(payload.session_code, advance_auto_random)
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
     await broadcast_state(state.session_code)

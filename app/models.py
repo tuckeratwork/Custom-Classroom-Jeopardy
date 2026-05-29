@@ -133,6 +133,8 @@ class GameState(BaseModel):
     buzz_winner: Optional[str] = None
     buzz_winner_student: Optional[str] = None
     buzz_expires_at: Optional[float] = None
+    auto_random_enabled: bool = False
+    auto_random_expires_at: Optional[float] = None
     last_buzz_team: Optional[str] = None
     last_buzz_student: Optional[str] = None
     buzz_order: List[str] = Field(default_factory=list)
@@ -177,6 +179,11 @@ class ScoreClueRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     session_code: str
+
+
+class AutoRandomRequest(BaseModel):
+    session_code: str
+    enabled: bool
 
 
 class StudentRequest(BaseModel):

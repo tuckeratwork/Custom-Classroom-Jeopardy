@@ -13,6 +13,8 @@ let lastScoreEventId = null;
 let hasSeenScoreState = false;
 let finalAdvanceInFlight = false;
 let finalRevealSignature = null;
+let openRosterTeams = new Set();
+let autoRandomAdvanceInFlight = false;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -325,7 +327,14 @@ function renderStudentRoster() {
   state.teams.forEach((team) => {
     const group = document.createElement("details");
     group.className = "student-roster-team";
-    group.open = Boolean(team.students?.length);
+    group.open = openRosterTeams.has(team.name);
+    group.addEventListener("toggle", () => {
+      if (group.open) {
+        openRosterTeams.add(team.name);
+      } else {
+        openRosterTeams.delete(team.name);
+      }
+    });
     group.innerHTML = `<summary>${escapeHtml(team.name)} (${team.students?.length || 0})</summary>`;
     if (!team.students?.length) {
       const empty = document.createElement("p");
@@ -342,6 +351,48 @@ function renderStudentRoster() {
     }
     roster.appendChild(group);
   });
+}
+
+function eligibleStudents() {
+  if (!state.current_clue_id || state.daily_double?.active || state.buzz_winner) {
+    return [];
+  }
+  const eligible = [];
+  state.teams.forEach((team) => {
+    if (state.steal_active && team.name === state.steal_lockout_team) {
+      return;
+    }
+    const students = team.students || [];
+    if (!students.length) {
+      return;
+    }
+    const available = state.steal_active || (team.answered_students || []).length >= students.length
+      ? students
+      : students.filter((student) => !(team.answered_students || []).some((name) => name.toLowerCase() === student.toLowerCase()));
+    available.forEach((student) => eligible.push({ team: team.name, student }));
+  });
+  return eligible;
+}
+
+function renderRotationStatus() {
+  const status = $("rotation-status");
+  const eligible = eligibleStudents();
+  if (!state.current_clue_id || state.daily_double?.active) {
+    status.innerHTML = "";
+    return;
+  }
+  if (state.buzz_winner) {
+    status.innerHTML = `<span class="muted">Buzz locked. Reset buzzers to reopen buzzing.</span>`;
+    return;
+  }
+  if (!eligible.length) {
+    status.innerHTML = `<strong>No eligible students.</strong> Use Clear student rotation to let everyone buzz again.`;
+    return;
+  }
+  status.innerHTML = `
+    <strong>Eligible to buzz:</strong>
+    ${eligible.map((item) => `<span class="rotation-pill">${escapeHtml(item.student)} (${escapeHtml(item.team)})</span>`).join("")}
+  `;
 }
 
 async function saveScoreOverrides() {
@@ -421,7 +472,9 @@ function renderControls() {
     }
   }
   dailyControls.classList.toggle("hidden", !clue?.is_daily_double);
+  $("auto-random-toggle").checked = Boolean(state.auto_random_enabled);
   $("reset-buzzer").textContent = "Reset buzzers";
+  renderRotationStatus();
 }
 
 function timerRemaining() {
@@ -496,7 +549,24 @@ function startTimerLoop() {
       updateFinalCountdown();
       advanceFinalIfExpired();
     }
+    advanceAutoRandomIfExpired();
   }, 250);
+}
+
+async function advanceAutoRandomIfExpired() {
+  if (!state || autoRandomAdvanceInFlight || !state.auto_random_expires_at) {
+    return;
+  }
+  if (Date.now() / 1000 < state.auto_random_expires_at) {
+    return;
+  }
+  autoRandomAdvanceInFlight = true;
+  try {
+    const data = await api("/api/buzzer/auto-random/advance", { session_code: sessionCode() });
+    state = data.state || data;
+  } finally {
+    autoRandomAdvanceInFlight = false;
+  }
 }
 
 async function advanceFinalIfExpired() {
@@ -529,13 +599,20 @@ function renderFinal() {
     : phase === "answer"
       ? countdownText(state.final.answer_expires_at)
       : "";
-  finalCard.innerHTML = `
-    <strong>${escapeHtml(state.final.category)}</strong>
-    <span id="teacher-final-phase" class="final-phase">${escapeHtml(phase.replace("_", " "))}${finalTimer ? ` · ${finalTimer}` : ""}</span><br>
-    ${state.final.revealed ? escapeHtml(state.final.prompt) : "Final prompt hidden."}
-    <hr><span class="muted">Answer: ${escapeHtml(state.final.answer || "")}</span>
-    ${phase === "complete" ? `<div id="teacher-winner-stage" class="final-reveal-stage"></div>` : ""}
-  `;
+  const finalPrivate = phase === "pending" || phase === "wager";
+  finalCard.innerHTML = finalPrivate
+    ? `
+      <strong>Final Jeopardy</strong>
+      <span id="teacher-final-phase" class="final-phase">${escapeHtml(phase.replace("_", " "))}${finalTimer ? ` · ${finalTimer}` : ""}</span><br>
+      Final category, prompt, and answer hidden until wagers are locked.
+    `
+    : `
+      <strong>${escapeHtml(state.final.category)}</strong>
+      <span id="teacher-final-phase" class="final-phase">${escapeHtml(phase.replace("_", " "))}${finalTimer ? ` · ${finalTimer}` : ""}</span><br>
+      ${state.final.revealed ? escapeHtml(state.final.prompt) : "Final prompt hidden."}
+      <hr><span class="muted">Answer: ${escapeHtml(state.final.answer || "")}</span>
+      ${phase === "complete" ? `<div id="teacher-winner-stage" class="final-reveal-stage"></div>` : ""}
+    `;
   if (phase === "complete") {
     runFinalReveal("teacher-winner-stage");
     const nextButton = $("next-final-reveal");
@@ -731,6 +808,21 @@ $("score-wrong").addEventListener("click", () => {
 
 $("reset-buzzer").addEventListener("click", () => {
   api("/api/buzzer/reset", { session_code: sessionCode() });
+});
+
+$("reset-rotation").addEventListener("click", () => {
+  api("/api/buzzer/reset-rotation", { session_code: sessionCode() });
+});
+
+$("random-buzz").addEventListener("click", () => {
+  api("/api/buzzer/random", { session_code: sessionCode() });
+});
+
+$("auto-random-toggle").addEventListener("change", (event) => {
+  api("/api/buzzer/auto-random", {
+    session_code: sessionCode(),
+    enabled: event.target.checked,
+  });
 });
 
 $("continue-clue").addEventListener("click", () => {

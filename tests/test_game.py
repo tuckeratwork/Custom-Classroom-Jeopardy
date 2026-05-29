@@ -4,6 +4,7 @@ import pytest
 
 from app.game import (
     GameError,
+    advance_auto_random,
     advance_final_timers,
     buzz,
     calculate_final_winners,
@@ -12,15 +13,19 @@ from app.game import (
     join_team,
     load_game_config,
     remove_student,
+    random_buzz_eligible,
     reset_buzzer,
+    reset_buzzer_rotation,
     reveal_final,
     score_current_clue,
     score_final,
     select_clue,
+    set_auto_random,
     set_team_scores,
     set_final_wagers,
     submit_final_wager,
     advance_final_reveal,
+    public_state,
 )
 
 
@@ -128,6 +133,67 @@ def test_student_buzzer_rotation_resets_after_team_cycle() -> None:
     select_clue(state, clues[2].id)
     buzz(state, "Red Team", "Alice")
     assert state.buzz_winner_student == "Alice"
+
+
+def test_teacher_can_clear_rotation_and_randomly_buzz_remaining_student() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST17")
+    clues = [
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    ]
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Red Team", "Ari")
+    select_clue(state, clues[0].id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=True)
+    select_clue(state, clues[1].id)
+
+    random_buzz_eligible(state)
+    assert state.buzz_winner == "Red Team"
+    assert state.buzz_winner_student == "Ari"
+
+    reset_buzzer_rotation(state)
+    assert next(team for team in state.teams if team.name == "Red Team").answered_students == []
+
+
+def test_auto_random_starts_on_selected_clue_and_picks_if_no_buzz() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST19")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    join_team(state, "Red Team", "Alice")
+    set_auto_random(state, True)
+
+    select_clue(state, clue.id)
+    assert state.auto_random_expires_at is not None
+    state.auto_random_expires_at = 1
+    advance_auto_random(state)
+
+    assert state.buzz_winner == "Red Team"
+    assert state.buzz_winner_student == "Alice"
+    assert state.auto_random_expires_at is None
+
+
+def test_auto_random_timer_clears_when_student_buzzes() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST20")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    join_team(state, "Red Team", "Alice")
+    set_auto_random(state, True)
+    select_clue(state, clue.id)
+
+    buzz(state, "Red Team", "Alice")
+
+    assert state.auto_random_expires_at is None
 
 
 def test_wrong_answer_can_open_one_steal_without_rotation_or_penalty() -> None:
@@ -335,6 +401,18 @@ def test_final_uses_joined_student_teams_only() -> None:
     advance_final_timers(state)
     assert state.phase == "final_answer"
     assert state.final.wagers == {"Red Team": 500}
+
+
+def test_public_state_hides_final_category_until_wagers_are_locked() -> None:
+    state = create_game_state(load_game_config("games/example.yaml"), session_code="TEST18")
+    join_team(state, "Red Team", "Alice")
+    reveal_final(state)
+
+    payload = public_state(state)
+
+    assert payload["final"]["category"] == "Final Jeopardy"
+    assert payload["final"]["prompt"] == ""
+    assert "answer" not in payload["final"]
 
 
 def test_final_wager_allows_500_floor_for_low_scores() -> None:
