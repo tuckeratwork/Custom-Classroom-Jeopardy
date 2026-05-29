@@ -8,97 +8,99 @@ categories:
     clues:
       - value: 100
         prompt: These are the three main port states Nmap might report.
-        answer: Open, Closed, and Filtered
+        answer: What are Open, Closed, and Filtered?
       - value: 200
-        prompt: This command line tool will utilize Twofish encryption.
-        answer: Cryptcat
+        prompt: This command line tool will utilize Twofish encryption to conduct: port scanning, file transfers, remote administration, banner grabbing, proxying, or listening...
+        answer: What is Cryptcat?
       - value: 300
         prompt: Nmap scans these ports by default.
-        answer: The 1000 most popular, top, or common ports
+        answer: What are 1000 popular/top/common ports?
       - value: 400
-        prompt: This method of facilitating a buffer overflow attack uses repeated jump instructions.
-        answer: Trampoline sled
+        prompt: This method of facilitating a buffer overflow attack will cause the program to jump to a known pointer stored within a register which points to the controlled buffer and thus the shellcode.
+        answer: What is a trampoline sled?
       - value: 500
-        prompt: This component of IPv6 creates a host's IP address based on router advertisements.
-        answer: Stateless Address Auto-configuration or SLAAC
+        prompt: This component of IPv6 creates a host's IP based on their MAC address. (FULL PROPER NAME)
+        answer: What is Stateless Address Auto-configuration or SLAAC?
 
   - name: Where Are My Keys?
     clues:
       - value: 100
         prompt: Base64, UTF-8, ASCII, UTF-16, hexadecimal, and URL encoding are examples of this.
-        answer: Encoding
+        answer: What is encoding?
       - value: 200
-        prompt: This is the key I would use to encrypt a message for a specific recipient.
-        answer: The recipient's public key
+        prompt: This is the key I would use to encrypt a message via asymmetric encryption (be specific).
+        answer: What is the recipient's public key?
       - value: 300
-        prompt: This is the paid alternative to GPG.
-        answer: Pretty Good Privacy or PGP
+        prompt: This is the paid alternative to GPG. (PROVIDE FULL NAME)
+        answer: What is Pretty Good Privacy or PGP?
       - value: 400
-        prompt: This layer 3 security protocol provides a cryptographic security service for IP traffic.
-        answer: IPsec
+        prompt: This layer 3 security protocol provides a cryptographic layer to both IPv4 and IPv6, in order to establish secure connections.
+        answer: What is IPsec?
       - value: 500
-        prompt: This property of symmetric encryption hides the relationship between the plaintext and ciphertext.
-        answer: Confusion
+        prompt: This property of symmetric encryption hides the statistical relationship between cipher text and key through substitution of characters.
+        answer: What is Confusion?
 
   - name: Hips Don't Lie
     clues:
       - value: 100
         prompt: In the same way ogres have layers, this security strategy uses layers of protection.
-        answer: Defense in Depth or DID
+        answer: What is Defense in Depth or DID?
       - value: 200
-        prompt: This would be the term to describe a device that monitors traffic at the network perimeter.
-        answer: Perimeter NIDS
+        prompt: This would be the term to describe a device that is analyzing packets; placed behind the firewall and off a span port so as not to interrupt traffic flow (be specific).
+        answer: What is a Perimeter NIDS?
       - value: 300
-        prompt: These are the two types of packet filtering commonly discussed in CNA.
-        answer: Stateless and stateful or dynamic
+        prompt: This IDS evasion technique is difficult to detect because the code can change itself on the fly, and thus has no static signature.
+        answer: What is polymorphic shellcode?
       - value: 400
         prompt: This physical component of an IDS/IPS collects network traffic for analysis.
-        answer: Sensor or NIC
+        answer: What is a Sensor or NIC?
       - value: 500
-        prompt: This technique can be used by network administrators to isolate and protect portions of a network.
-        answer: Network segmentation
+        prompt: This technique can be used by network administrators to separate your network into smaller parts, allowing you to isolate those sections if needed.
+        answer: What is network segmentation?
 
   - name: Oops I Snorted
     clues:
       - value: 100
-        prompt: These are uniquely identifying characteristics used by Snort to detect activity.
-        answer: Signatures
+        prompt: These are uniquely identifying characteristics of known malware/threats that can be compared against to find malicious activity.
+        answer: What are signatures?
       - value: 200
-        prompt: This is the event classification for benign activity that is incorrectly flagged as malicious.
-        answer: False positive
+        prompt: This is the event classification to describe the following scenario:
+                My IDS alerts with the following message: “BRUTE FORCE LOGIN DETECTED”. 
+                Upon inspection, it is revealed that a user simply forgot their password and made too many attempts.
+        answer: What is a false positive?
       - value: 300
-        prompt: Using a series of 0x90 opcodes, I can facilitate this type of exploit.
-        answer: Buffer overflow attack
+        prompt: Using a series of 0x90 opcodes, I can facilitate this type of attack.
+        answer: What is a buffer overflow attack?
       - value: 400
-        prompt: Upholding the Operations layer of Defense in Depth requires maintaining this known-good standard.
-        answer: Baseline configuration
+        prompt: Upholding the Operations layer of Defense in Depth; the continuous improvement of policies and procedures for operating systems, network devices, applications, and cloud services are examples of this network defense methodology.
+        answer: What is baseline configuration?
       - value: 500
-        prompt: Snort infers its mode from command-line options, but packet capture is handled by this module.
-        answer: Data Acquisition or DAQ module
+        prompt: Snort infers its mode from command-line options and this software level ingestion component.
+        answer: What is the Data Acquisition or DAQ module?
 
   - name: Cat Phishing
     clues:
       - value: 100
-        prompt: This social engineering technique involves threatening or coercing a victim.
-        answer: Blackmail
+        prompt: This social engineering technique involves threatening to release information to defame someone, in order to coerce them into performing a desired action.
+        answer: What is blackmail?
       - value: 200
-        prompt: This social engineering technique involves establishing a fabricated scenario or identity.
-        answer: Pretexting
+        prompt: This social engineering technique involves establishing a false narrative to trick a victim into providing sensitive information.
+        answer: What is pretexting?
       - value: 300
         prompt: This two-word term describes a phishing attack that is tailored to a specific individual or organization.
-        answer: Spear phishing
+        answer: What is spear phishing?
       - value: 400
-        prompt: LimeWire would be an example of this type of attack or infection path.
-        answer: Drive-by download
+        prompt: LimeWire would be an example of this type of attack.
+        answer: What is a drive-by download?
       - value: 500
-        prompt: Deemed the worst breach of U.S. military computers, this road-apple-introduced malware led to Operation Buckshot Yankee and the eventual formation of the US Cyber Command.
-        answer: Agent.btz
+        prompt: Deemed the "worst breach of U.S. military computers in history", this road-apple-introduced attack led to the eventual formation of the US Cyber Command.
+        answer: What is Agent.btz or Operation Buckshot Yankee?
 
 daily_double:
   prompt: These two branches of the US military, at least according to current public knowledge, have had no known cyber insider threat incidents.
-  answer: Space Force and Marine Corps
+  answer: What are Space Force and Marine Corps?
 
 final:
   category: IPv6 Attacks
   prompt: Name three IPv6 attacks that were discussed in class.
-  answer: Address spoofing, SLAAC spoofing, router advertisement spoofing, or another valid IPv6 attack discussed in class
+  answer: Address spoofing, RA spoofing, DAD spoofing, NDP cache poisoning, and tresspassing.

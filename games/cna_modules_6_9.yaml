@@ -1,0 +1,104 @@
+title: CNA Modules 6 - 9
+teams:
+  - Red Team
+  - Blue Team
+
+categories:
+  - name: Pretty Kool Instructors
+    clues:
+      - value: 100
+        prompt: PKI primarily utilizes this type of encryption.
+        answer: What is asymmetric encryption?
+      - value: 200
+        prompt: This is what you would submit to a CA.
+        answer: What is a Certificate Signing Request or CSR?
+      - value: 300
+        prompt: This goal/advantage of PKI is primarily acheived through signatures, preventing denial of involvement.
+        answer: What is non-repudiation?
+      - value: 400
+        prompt: SSH is comprised of these three main components
+        answer: What are Transport Later, User Authentication Layer, and Connection Layer??
+      - value: 500
+        prompt: In the TLS handshake, this phase includes everything from CLIENTHELLO to the creation of the "Master Secret".
+        answer: What is the negotiation phase?
+
+  - name: Several Ways to Verify
+    clues:
+      - value: 100
+        prompt: This proprietary device uses a time-based algorithm to generate authentication codes without network connectivity.
+        answer: What is a RSA Token?
+      - value: 200
+        prompt: This is a temporary authentication code valid for a single use, typically sent via sms or email.
+        answer: What is a One-Time Password or OTP?
+      - value: 300
+        prompt: These are the four categories of MFA.
+        answer: What are knowledge, possession, inherence, and location factors?
+      - value: 400
+        prompt: This USB or NFC device stores cryptographic keys for authentication.
+        answer: What is a security key or YubiKey?
+      - value: 500
+        prompt: This component of your CAC stores information such as PKI certificates and digital fingerprints.
+        answer: What is the integrated circuit chip (ICC)?
+
+  - name: Wall of Fire
+    clues:
+      - value: 100
+        prompt: This type of firewall inspects individual data packets as they pass through; based soley on header information.
+        answer: What is a stateless/packet filtering firewall?
+      - value: 200
+        prompt: This type of firewall can prevent session hijacking by keeping track of active connections, but lacks any application visibility.
+        answer: What is a stateful or dynamic firewall?
+      - value: 300
+        prompt: This device is application aware and acts as an intermediary between internal clients and external servers; hiding internal network segments.
+        answer: What is a proxy firewall or application-level gateway?
+      - value: 400
+        prompt: A NGFW operates at these three layers.
+        answer: What are 3, 4, and 7 (network, transport, and application)?
+      - value: 500
+        prompt: This is the firewall architecture that can maintain a physically separated DMZ but is still susceptible to a single point-of-failure.
+        answer: What is a tri-homed/three-legged architecture?
+
+  - name: Smells Like Hostdog
+    clues:
+      - value: 100
+        prompt: This term describes any program or device designed to intercept and capture network traffic passively.
+        answer: What is a sniffer or IDS?
+      - value: 200
+        prompt: Sniffers typically operate in this mode.
+        answer: What is passive or promiscuous mode?
+      - value: 300
+        prompt: These are the five sniffer detection methods we discussed in class.
+        answer: What are ping, DNS, ARP, latency, and local host methods?
+      - value: 400
+        prompt: Sending an ICMP echo request with an incorrect MAC address would be the first step in this sniffer detection method.
+        answer: What is the ping method?
+      - value: 500
+        prompt: Snort infers its mode from command-line options and this software level ingestion component.
+        answer: What is the Data Acquisition or DAQ module?
+
+  - name: Instructor Trivia (no points lost)
+    clues:
+      - value: 100
+        prompt: Mr. Tucker and Mr. R both consider this to be the most exhausting and overrated anime of all time.
+        answer: What is One Piece?
+      - value: 200
+        prompt: Your fellow anime connoisseur, Mr. Tucker, considers this to be his favorite Studio Ghibli movie.
+        answer: What is Howl's Moving Castle?
+      - value: 300
+        prompt: Mr. Smith's dream car is this make and model.
+        answer: What is a Ford Bronco Sport?
+      - value: 400
+        prompt: Mr. Tucker's father served in this branch of the US Military.
+        answer: What is the Army?
+      - value: 500
+        prompt: Mr. R once was a Team USA athelete in this chilly olympic sport.
+        answer: What is bobsledding?
+
+daily_double:
+  prompt: What was the REAL name (first and last) of the villain from our lesson 9 introduction video?
+  answer: Who is John Kramer? 
+
+final:
+  category: Snort Alert Options
+  prompt: List five of the available alert modes that defines Snort 3's output via -A.
+  answer: alert_json, alert_csv, alert_fast, alert_full, alert_talos, alert_syslog, alert_unixsock, and cmg.
