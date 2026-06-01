@@ -67,14 +67,14 @@ categories:
         prompt: Sniffers typically operate in this mode.
         answer: What is passive or promiscuous mode?
       - value: 300
+        prompt: This sniffer detection method involves sending an ICMP echo request with an incorrect MAC address to all devices on the network, and then observing if any of them respond.
+        answer: What is the ping method?
+      - value: 400
+        prompt: This sniffer detection method may involve sending a malformed ping packet to all devices on the network, and then observing if any of them attempt to resolve the sender's IP to a domain name.
+        answer: What is the DNS method?
+      - value: 500
         prompt: These are the five sniffer detection methods we discussed in class.
         answer: What are ping, DNS, ARP, latency, and local host methods?
-      - value: 400
-        prompt: Sending an ICMP echo request with an incorrect MAC address would be the first step in this sniffer detection method.
-        answer: What is the ping method?
-      - value: 500
-        prompt: Snort infers its mode from command-line options and this software level ingestion component.
-        answer: What is the Data Acquisition or DAQ module?
 
   - name: Instructor Trivia (no points lost)
     clues:
@@ -86,7 +86,7 @@ categories:
         answer: What is Howl's Moving Castle?
       - value: 300
         prompt: Mr. Smith's dream car is this make and model.
-        answer: What is a Ford Bronco Sport?
+        answer: What is a Ford Bronco Sport (specifically in coral pearl pink)?
       - value: 400
         prompt: Mr. Tucker's father served in this branch of the US Military.
         answer: What is the Army?
@@ -99,6 +99,6 @@ daily_double:
   answer: Who is John Kramer? 
 
 final:
-  category: Snort Alert Options
-  prompt: List five of the available alert modes that defines Snort 3's output via -A.
-  answer: alert_json, alert_csv, alert_fast, alert_full, alert_talos, alert_syslog, alert_unixsock, and cmg.
+  category: PKI
+  prompt: List all steps of the TCP handshake from "ClientHello" to "Finished", in order. You may not look at your notes.
+  answer: What are ClientHello, ServerHello, Server Certificate, Server Hello Done, Client Key Exchange, Client Change Cipher Spec, Client Finished, Server Change Cipher Spec, and Server Finished?
