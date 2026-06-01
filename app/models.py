@@ -82,9 +82,13 @@ class DailyDoubleState(BaseModel):
     clue_id: str
     active: bool = False
     team_name: Optional[str] = None
+    leader: Optional[str] = None
     wager: Optional[int] = None
+    wager_submitted_by: Optional[str] = None
     question_revealed: bool = False
     answer_expires_at: Optional[float] = None
+    submission: Optional[str] = None
+    submitted_by: Optional[str] = None
 
 
 class FinalState(BaseModel):
@@ -225,3 +229,17 @@ class DailyDoubleWagerRequest(BaseModel):
     session_code: str
     team_name: str
     wager: int = Field(ge=0)
+
+
+class DailyDoubleStudentWagerRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str
+    wager: int = Field(ge=0)
+
+
+class DailyDoubleAnswerRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str
+    answer: str

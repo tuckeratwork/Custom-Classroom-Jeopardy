@@ -36,10 +36,14 @@ from .game import (
     set_final_wagers,
     submit_final_answer,
     submit_final_wager,
+    submit_daily_double_answer,
+    submit_daily_double_wager,
 )
 from .models import (
     AutoRandomRequest,
     BuzzRequest,
+    DailyDoubleAnswerRequest,
+    DailyDoubleStudentWagerRequest,
     DailyDoubleWagerRequest,
     FinalAnswerRequest,
     FinalScoreRequest,
@@ -324,6 +328,46 @@ async def daily_double_wager_route(payload: DailyDoubleWagerRequest, teacher: st
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/daily-double/student-wager")
+async def daily_double_student_wager_route(payload: DailyDoubleStudentWagerRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: submit_daily_double_wager(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.wager,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state)
+
+
+@app.post("/api/daily-double/answer")
+async def daily_double_answer_route(payload: DailyDoubleAnswerRequest) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: submit_daily_double_answer(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.answer,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state)
 
 
 @app.post("/api/buzzer/reset")

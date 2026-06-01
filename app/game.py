@@ -145,6 +145,8 @@ def public_state(state: GameState, reveal_answers: bool = False) -> dict:
             payload["final"]["wager_values_hidden"] = True
         if not payload["final"]["results_revealed"]:
             payload["final"]["scored"] = {}
+        if payload["daily_double"].get("submission"):
+            payload["daily_double"]["submission"] = "Submitted"
     return payload
 
 
@@ -284,16 +286,24 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
     state.steal_lockout_team = None
     if clue.is_daily_double:
         state.daily_double.active = True
-        state.daily_double.team_name = selecting_team
+        state.daily_double.team_name = state.last_buzz_team or selecting_team
+        state.daily_double.leader = state.last_buzz_student if state.last_buzz_team else None
         state.daily_double.wager = None
+        state.daily_double.wager_submitted_by = None
         state.daily_double.question_revealed = False
         state.daily_double.answer_expires_at = None
+        state.daily_double.submission = None
+        state.daily_double.submitted_by = None
     else:
         state.daily_double.active = False
         state.daily_double.team_name = None
+        state.daily_double.leader = None
         state.daily_double.wager = None
+        state.daily_double.wager_submitted_by = None
         state.daily_double.question_revealed = False
         state.daily_double.answer_expires_at = None
+        state.daily_double.submission = None
+        state.daily_double.submitted_by = None
         if state.auto_random_enabled:
             state.auto_random_expires_at = time.time() + AUTO_RANDOM_SECONDS
     return state
@@ -316,8 +326,59 @@ def lock_daily_double_wager(
         raise GameError("wager must be non-negative")
     state.daily_double.team_name = team_name
     state.daily_double.wager = wager
+    state.daily_double.wager_submitted_by = "Teacher"
     state.daily_double.question_revealed = True
     state.daily_double.answer_expires_at = time.time() + DAILY_DOUBLE_ANSWER_SECONDS
+    return state
+
+
+def submit_daily_double_wager(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    wager: int,
+) -> GameState:
+    if state.phase != "board":
+        raise GameError("Daily Double wagers can only be submitted during board play")
+    if not state.current_clue_id:
+        raise GameError("no clue is currently active")
+    clue = find_clue(state, state.current_clue_id)
+    if not clue.is_daily_double or not state.daily_double.active:
+        raise GameError("the current clue is not an active Daily Double")
+    student = normalize_student_name(student_name)
+    if state.daily_double.team_name != team_name or state.daily_double.leader != student:
+        raise GameError(f"{student} is not the Daily Double leader for {team_name}")
+    if wager < 0:
+        raise GameError("wager must be non-negative")
+    state.daily_double.wager = wager
+    state.daily_double.wager_submitted_by = student
+    state.daily_double.question_revealed = True
+    state.daily_double.answer_expires_at = time.time() + DAILY_DOUBLE_ANSWER_SECONDS
+    return state
+
+
+def submit_daily_double_answer(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    answer: str,
+) -> GameState:
+    if state.phase != "board":
+        raise GameError("Daily Double answers can only be submitted during board play")
+    if not state.current_clue_id:
+        raise GameError("no clue is currently active")
+    clue = find_clue(state, state.current_clue_id)
+    if not clue.is_daily_double or not state.daily_double.active:
+        raise GameError("the current clue is not an active Daily Double")
+    student = normalize_student_name(student_name)
+    if state.daily_double.team_name != team_name or state.daily_double.leader != student:
+        raise GameError(f"{student} is not the Daily Double leader for {team_name}")
+    if not state.daily_double.question_revealed:
+        raise GameError("Daily Double wager must be locked before submitting an answer")
+    if time.time() > (state.daily_double.answer_expires_at or 0):
+        raise GameError("Daily Double answer timer has expired")
+    state.daily_double.submission = answer.strip()
+    state.daily_double.submitted_by = student
     return state
 
 
@@ -435,8 +496,14 @@ def finish_current_clue(state: GameState, clue: ClueState) -> None:
     state.steal_active = False
     state.steal_lockout_team = None
     state.daily_double.active = False
+    state.daily_double.team_name = None
+    state.daily_double.leader = None
+    state.daily_double.wager = None
+    state.daily_double.wager_submitted_by = None
     state.daily_double.question_revealed = False
     state.daily_double.answer_expires_at = None
+    state.daily_double.submission = None
+    state.daily_double.submitted_by = None
 
 
 def score_current_clue(

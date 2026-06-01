@@ -425,6 +425,13 @@ body[data-role="teacher"] .score-row {
   font-weight: 800;
 }
 
+.auto-random-toggle input {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+}
+
 .buzz-timer {
   display: grid;
   place-items: center;

@@ -267,6 +267,10 @@ function finalWagerLimit() {
   return score >= 500 ? score : 500;
 }
 
+function isDailyDoubleLeader() {
+  return state?.daily_double?.team_name === teamName && state.daily_double?.leader === studentName;
+}
+
 function canBuzz(clue) {
   if (!clue || clue.is_daily_double || state.buzz_winner) {
     return false;
@@ -353,6 +357,49 @@ function renderFinalLeaderboard() {
       <strong>$${displayScore(team)}</strong>
     </div>
   `).join("");
+}
+
+function renderDailyDoubleAction(clue) {
+  const action = $("daily-double-action");
+  action.classList.add("hidden");
+  action.innerHTML = "";
+  if (!clue?.is_daily_double || !state.daily_double?.active) {
+    return;
+  }
+  action.classList.remove("hidden");
+  const leader = state.daily_double.leader || "Waiting for leader";
+  const isLeader = isDailyDoubleLeader();
+  const wagerLocked = state.daily_double.wager !== null && state.daily_double.wager !== undefined;
+  const submitted = state.daily_double.submission !== null && state.daily_double.submission !== undefined;
+  if (!isLeader) {
+    action.innerHTML = `<p>Daily Double leader: ${escapeHtml(leader)}</p>`;
+    return;
+  }
+  if (!wagerLocked) {
+    action.innerHTML = `
+      <p id="daily-double-error" class="error-text"></p>
+      <label for="daily-double-wager-input">Daily Double wager</label>
+      <input id="daily-double-wager-input" type="number" min="0" value="${clue.value}" inputmode="numeric">
+      <button id="submit-daily-double-wager">Lock wager</button>
+    `;
+    $("submit-daily-double-wager")?.addEventListener("click", submitDailyDoubleWager);
+    return;
+  }
+  if (!state.daily_double.question_revealed) {
+    action.innerHTML = `<p>Waiting for the Daily Double question.</p>`;
+    return;
+  }
+  if (submitted) {
+    action.innerHTML = `<p>Your team's Daily Double answer is submitted.</p>`;
+    return;
+  }
+  action.innerHTML = `
+    <p id="daily-double-error" class="error-text"></p>
+    <label for="daily-double-answer-input">Daily Double answer</label>
+    <textarea id="daily-double-answer-input" rows="3"></textarea>
+    <button id="submit-daily-double-answer">Submit answer</button>
+  `;
+  $("submit-daily-double-answer")?.addEventListener("click", submitDailyDoubleAnswer);
 }
 
 function renderFinalAction() {
@@ -600,7 +647,9 @@ function render() {
     const isDailyDoubleTeam = state.daily_double.team_name === teamName;
     $("student-clue").textContent = state.daily_double.question_revealed && isDailyDoubleTeam
       ? clue.prompt
-      : "Daily Double. The teacher will manage the wager.";
+      : isDailyDoubleTeam
+        ? "Daily Double. Your leader will lock the wager."
+        : "Daily Double.";
     button.disabled = true;
     if (state.daily_double.question_revealed) {
       stopMusic();
@@ -650,7 +699,64 @@ function render() {
 
   renderTimer();
   renderScoreEvent();
+  renderDailyDoubleAction(clue);
   renderFinalMode();
+}
+
+async function submitDailyDoubleWager() {
+  const input = $("daily-double-wager-input");
+  const error = $("daily-double-error");
+  const wager = Number(input.value || 0);
+  if (!Number.isInteger(wager) || wager < 0) {
+    error.textContent = "Enter a whole dollar amount of $0 or more.";
+    input.focus();
+    return;
+  }
+  const response = await fetch("/api/daily-double/student-wager", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      wager,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    error.textContent = data.detail || "Unable to submit wager.";
+    return;
+  }
+  state = data;
+  render();
+}
+
+async function submitDailyDoubleAnswer() {
+  const input = $("daily-double-answer-input");
+  const error = $("daily-double-error");
+  const answer = input.value.trim();
+  if (!answer) {
+    error.textContent = "Enter an answer before submitting.";
+    input.focus();
+    return;
+  }
+  const response = await fetch("/api/daily-double/answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      answer,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    error.textContent = data.detail || "Unable to submit answer.";
+    return;
+  }
+  state = data;
+  render();
 }
 
 async function submitFinalWager() {

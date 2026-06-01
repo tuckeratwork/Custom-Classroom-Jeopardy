@@ -85,7 +85,8 @@ The teacher console is the control room for the game.
 - **Clear student rotation** lets all joined students buzz again if the rotation creates a stalemate.
 - **Random eligible buzz** randomly selects one currently eligible student and buzzes in for them.
 - **Auto-random eligible student after 15 seconds** starts a presentation-board countdown when a normal clue is selected. If no student buzzes before it reaches zero, the app randomly buzzes one eligible student.
-- **Eligible to buzz** shows which students can currently buzz based on the team rotation and steal lockout rules.
+- **Show eligible students** toggles the eligible student list. It is off by default to keep the teacher panel less cluttered.
+- **Eligible to buzz** shows which students can currently buzz based on the team rotation and steal lockout rules when that display is enabled.
 
 ## Normal Clues
 
@@ -101,7 +102,9 @@ Student rotation is tracked per team so the same student cannot repeatedly answe
 
 One clue is randomly selected as the Daily Double. When it is chosen, normal buzzing is disabled.
 
-The teacher selects the team, enters a wager, and presses **Lock wager**. The Daily Double question is then shown to that team. The teacher scores it with **Correct** or **Wrong**. Daily Double scoring uses the wager amount instead of the clue value.
+The Daily Double leader is the student who buzzed in last, since that student chose the next tile. That leader locks the team's wager from their student screen, then receives the Daily Double prompt and submits the team's answer before the timer expires. The teacher reviews the submitted answer in the Current clue panel and scores it with **Correct** or **Wrong**.
+
+The teacher can still enter a wager and press **Lock wager** from the console if a manual override is needed. Daily Double scoring uses the wager amount instead of the clue value.
 
 ## Final Jeopardy
 

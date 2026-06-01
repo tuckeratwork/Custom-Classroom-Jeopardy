@@ -7,11 +7,53 @@ from app.store import GameStore
 
 
 AUTH = ("teacher", "jeopardy")
+GAME_PATH = "games/cna_modules_6_9.yaml"
+TEAM_NAMES = ["Red Team", "Blue Team"]
+CLASSROOM = {
+    "Red Team": [
+        "Alice",
+        "Ari",
+        "Riley",
+        "Rowan",
+        "Reese",
+        "Rory",
+        "River",
+        "Remy",
+        "Robin",
+        "Ryan",
+    ],
+    "Blue Team": [
+        "Ben",
+        "Bea",
+        "Blake",
+        "Bailey",
+        "Briar",
+        "Brett",
+        "Brooke",
+        "Bryce",
+        "Billie",
+        "Brooklyn",
+    ],
+}
 
 
 def use_test_store(tmp_path, monkeypatch) -> None:
     test_store = GameStore(tmp_path / "test.db")
     monkeypatch.setattr(main, "store", test_store)
+
+
+async def join_classroom(client: AsyncClient, session_code: str) -> None:
+    for team_name, students in CLASSROOM.items():
+        for student in students:
+            response = await client.post(
+                "/api/join",
+                json={
+                    "session_code": session_code,
+                    "team_name": team_name,
+                    "student_name": student,
+                },
+            )
+            assert response.status_code == 200
 
 
 def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
@@ -22,18 +64,14 @@ def test_start_join_select_buzz_score_flow(tmp_path, monkeypatch) -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             start_response = await client.post(
                 "/api/game/start",
-                json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
                 auth=AUTH,
             )
             assert start_response.status_code == 200
             state = start_response.json()
             code = state["session_code"]
 
-            join_response = await client.post(
-                "/api/join",
-                json={"session_code": code, "team_name": "Red Team", "student_name": "Alice"},
-            )
-            assert join_response.status_code == 200
+            await join_classroom(client, code)
 
             clue = next(
                 clue
@@ -77,7 +115,7 @@ def test_student_state_hides_answers(tmp_path, monkeypatch) -> None:
             state = (
                 await client.post(
                     "/api/game/start",
-                    json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
                     auth=AUTH,
                 )
             ).json()
@@ -101,7 +139,7 @@ def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None
             first = (
                 await client.post(
                     "/api/game/start",
-                    json={"config_path": "games/example.yaml", "team_names": ["Red Team", "Blue Team"]},
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
                     auth=AUTH,
                 )
             ).json()
@@ -110,7 +148,7 @@ def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None
             reset_response = await client.post(
                 "/api/game/start",
                 json={
-                    "config_path": "games/example.yaml",
+                    "config_path": GAME_PATH,
                     "team_names": ["Green Team", "Gold Team"],
                     "previous_session_code": old_code,
                 },

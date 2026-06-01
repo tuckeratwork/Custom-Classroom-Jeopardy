@@ -15,6 +15,7 @@ let finalAdvanceInFlight = false;
 let finalRevealSignature = null;
 let openRosterTeams = new Set();
 let autoRandomAdvanceInFlight = false;
+let showEligibleStudents = localStorage.getItem("jeopardy_show_eligible") === "true";
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -376,6 +377,10 @@ function eligibleStudents() {
 
 function renderRotationStatus() {
   const status = $("rotation-status");
+  if (!showEligibleStudents) {
+    status.innerHTML = "";
+    return;
+  }
   const eligible = eligibleStudents();
   if (!state.current_clue_id || state.daily_double?.active) {
     status.innerHTML = "";
@@ -459,7 +464,14 @@ function renderControls() {
   } else {
     current.classList.remove("muted");
     const marker = clue.is_daily_double ? "Daily Double: " : "";
-    current.innerHTML = `<strong>$${clue.value}</strong><br>${marker}${clue.prompt}<hr><span class="muted">Answer: ${clue.answer}</span>`;
+    const dailyDoubleMeta = clue.is_daily_double ? `
+      <hr>
+      <span class="muted">Leader: ${escapeHtml(state.daily_double.leader || "No leader yet")}</span><br>
+      <span class="muted">Wager: ${state.daily_double.wager ?? "Not locked"}</span><br>
+      <span class="muted">Submitted by: ${escapeHtml(state.daily_double.submitted_by || "No answer submitted")}</span>
+      ${state.daily_double.submission ? `<div class="final-submission">${escapeHtml(state.daily_double.submission)}</div>` : ""}
+    ` : "";
+    current.innerHTML = `<strong>$${clue.value}</strong><br>${marker}${clue.prompt}<hr><span class="muted">Answer: ${clue.answer}</span>${dailyDoubleMeta}`;
     if (clue.is_daily_double) {
       $("buzz-status").textContent = `Daily Double for ${state.daily_double.team_name || "selected team"}`;
     } else if (state.buzz_winner) {
@@ -473,12 +485,15 @@ function renderControls() {
   }
   dailyControls.classList.toggle("hidden", !clue?.is_daily_double);
   $("auto-random-toggle").checked = Boolean(state.auto_random_enabled);
+  $("show-eligible-toggle").checked = showEligibleStudents;
   $("reset-buzzer").textContent = "Reset buzzers";
   renderRotationStatus();
 }
 
 function timerRemaining() {
-  const expiresAt = state.buzz_expires_at || state.daily_double?.answer_expires_at;
+  const expiresAt = state.buzz_expires_at
+    || state.daily_double?.answer_expires_at
+    || (!state.buzz_winner ? state.auto_random_expires_at : null);
   if (!expiresAt) {
     return null;
   }
@@ -491,7 +506,11 @@ function renderTimer() {
   }
   const timer = $("buzz-timer");
   const remaining = timerRemaining();
-  if (remaining === null || (!state.buzz_winner && !state.daily_double?.question_revealed)) {
+  const showAutoRandomTimer = Boolean(state.auto_random_expires_at && !state.buzz_winner);
+  if (
+    remaining === null
+    || (!state.buzz_winner && !state.daily_double?.question_revealed && !showAutoRandomTimer)
+  ) {
     timer.classList.add("hidden");
     timer.textContent = "10";
     return;
@@ -501,7 +520,7 @@ function renderTimer() {
   timer.classList.toggle("buzz-timer-expired", remaining <= 0);
   timer.textContent = String(remaining);
 
-  const signature = `${state.buzz_winner || state.daily_double?.team_name}:${state.buzz_winner_student || "daily-double"}:${state.buzz_expires_at || state.daily_double?.answer_expires_at}`;
+  const signature = `${state.buzz_winner || state.daily_double?.team_name || "auto-random"}:${state.buzz_winner_student || "timer"}:${state.buzz_expires_at || state.daily_double?.answer_expires_at || state.auto_random_expires_at}`;
   if (remaining <= 0 && expiredTimerSignature !== signature) {
     expiredTimerSignature = signature;
     playTimerExpiredCue();
@@ -823,6 +842,12 @@ $("auto-random-toggle").addEventListener("change", (event) => {
     session_code: sessionCode(),
     enabled: event.target.checked,
   });
+});
+
+$("show-eligible-toggle").addEventListener("change", (event) => {
+  showEligibleStudents = event.target.checked;
+  localStorage.setItem("jeopardy_show_eligible", String(showEligibleStudents));
+  renderRotationStatus();
 });
 
 $("continue-clue").addEventListener("click", () => {
