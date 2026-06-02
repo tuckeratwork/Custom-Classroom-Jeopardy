@@ -32,7 +32,13 @@ class GameError(ValueError):
 
 
 def load_game_config(path: str | Path) -> GameConfig:
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    config_path = Path(path)
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise GameError(f"could not read game YAML {config_path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise GameError(f"could not parse game YAML {config_path}: {exc}") from exc
     if not isinstance(data, dict):
         raise GameError("game YAML must contain an object at the top level")
     try:
@@ -276,6 +282,7 @@ def select_clue(state: GameState, clue_id: str, selecting_team: Optional[str] = 
     if selecting_team:
         find_team(state, selecting_team)
     state.current_clue_id = clue_id
+    state.last_completed_clue_id = None
     state.buzz_winner = None
     state.buzz_winner_student = None
     state.buzz_expires_at = None
@@ -486,6 +493,7 @@ def reset_buzzer(state: GameState) -> GameState:
 
 def finish_current_clue(state: GameState, clue: ClueState) -> None:
     clue.revealed = True
+    state.last_completed_clue_id = clue.id
     state.current_clue_id = None
     state.buzz_winner = None
     state.buzz_winner_student = None

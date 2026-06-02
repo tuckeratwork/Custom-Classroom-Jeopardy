@@ -100,5 +100,5 @@ daily_double:
 
 final:
   category: PKI
-  prompt: List all steps of the TCP handshake from "ClientHello" to "Finished", in order. You may not look at your notes.
+  prompt: List all steps of the TLS handshake from "ClientHello" to "Finished", in order. You may not look at your notes.
   answer: What are ClientHello, ServerHello, Server Certificate, Server Hello Done, Client Key Exchange, Client Change Cipher Spec, Client Finished, Server Change Cipher Spec, and Server Finished?

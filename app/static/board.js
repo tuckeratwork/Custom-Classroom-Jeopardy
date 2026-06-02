@@ -137,9 +137,16 @@ function currentClue() {
   if (!state?.current_clue_id) {
     return null;
   }
+  return findClueById(state.current_clue_id);
+}
+
+function findClueById(clueId) {
+  if (!clueId) {
+    return null;
+  }
   for (const category of state.categories) {
     for (const clue of category.clues) {
-      if (clue.id === state.current_clue_id) {
+      if (clue.id === clueId) {
         return clue;
       }
     }
@@ -205,11 +212,12 @@ function renderClue() {
     return;
   }
   if (!clue) {
-    if (Date.now() < answerRevealUntil && state.score_event?.clue_answer) {
+    const completedClue = findClueById(state.last_completed_clue_id);
+    if (completedClue?.answer) {
       board.innerHTML = `
-        <p class="eyebrow">$${state.score_event.clue_value || ""}</p>
-        <h2>${escapeHtml(state.score_event.clue_prompt || "")}</h2>
-        <div class="presentation-answer">${escapeHtml(state.score_event.clue_answer)}</div>
+        <p class="eyebrow">${completedClue.is_daily_double ? "Daily Double" : `$${completedClue.value}`}</p>
+        <h2>${escapeHtml(completedClue.prompt || "")}</h2>
+        <div class="presentation-answer">${escapeHtml(completedClue.answer)}</div>
       `;
       return;
     }

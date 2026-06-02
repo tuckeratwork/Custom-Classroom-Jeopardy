@@ -74,7 +74,15 @@ def test_load_game_config() -> None:
     config = load_game_config(GAME_PATH)
     assert config.title == "CNA Modules 6 - 9"
     assert len(config.teams) == 2
-    assert config.final.answer.startswith("alert_json")
+    assert config.final.category
+    assert config.final.prompt
+    assert config.final.answer
+
+
+def test_loads_cna_modules_1_5_config() -> None:
+    config = load_game_config("games/cna_modules_1_5.yaml")
+    assert config.title == "The REAL CNA Modules 1 - 5"
+    assert len(config.categories) == 5
 
 
 def test_game_state_can_use_runtime_team_names() -> None:
@@ -115,6 +123,7 @@ def test_regular_scoring_and_buzzer_lockout() -> None:
     assert state.score_event.delta == clue.value
     assert clue.revealed is True
     assert state.current_clue_id is None
+    assert state.last_completed_clue_id == clue.id
     assert state.buzz_expires_at is None
     assert state.last_buzz_team == "Red Team"
     assert state.last_buzz_student == "Alice"
@@ -386,6 +395,7 @@ def test_teacher_can_skip_unanswered_steal_by_selecting_next_clue() -> None:
 
     assert clues[0].revealed is True
     assert state.current_clue_id == clues[1].id
+    assert state.last_completed_clue_id is None
     assert state.steal_active is False
     assert state.steal_lockout_team is None
 
@@ -412,6 +422,7 @@ def test_teacher_can_continue_after_steal_window_without_more_points() -> None:
     assert clue.revealed is True
     assert state.current_clue_id is None
     assert state.steal_active is False
+    assert state.last_completed_clue_id == clue.id
 
 
 def test_wrong_without_steal_buzz_continues_without_more_points() -> None:
@@ -545,4 +556,15 @@ def test_invalid_yaml_reports_error(tmp_path: Path) -> None:
     bad_yaml.write_text("title: Missing pieces\n", encoding="utf-8")
 
     with pytest.raises(GameError):
+        load_game_config(bad_yaml)
+
+
+def test_malformed_yaml_reports_game_error(tmp_path: Path) -> None:
+    bad_yaml = tmp_path / "bad-syntax.yaml"
+    bad_yaml.write_text(
+        "title: Bad\ncategories:\n  - name: Broken\n    clues:\n      - prompt: Text: breaks\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(GameError, match="could not parse game YAML"):
         load_game_config(bad_yaml)

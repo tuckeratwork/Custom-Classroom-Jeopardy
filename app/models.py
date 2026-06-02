@@ -134,6 +134,7 @@ class GameState(BaseModel):
     final: FinalState
     phase: str = "board"
     current_clue_id: Optional[str] = None
+    last_completed_clue_id: Optional[str] = None
     buzz_winner: Optional[str] = None
     buzz_winner_student: Optional[str] = None
     buzz_expires_at: Optional[float] = None

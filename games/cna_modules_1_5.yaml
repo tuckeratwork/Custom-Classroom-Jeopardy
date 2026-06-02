@@ -10,7 +10,7 @@ categories:
         prompt: These are the three main port states Nmap might report.
         answer: What are Open, Closed, and Filtered?
       - value: 200
-        prompt: This command line tool will utilize Twofish encryption to conduct: port scanning, file transfers, remote administration, banner grabbing, proxying, or listening...
+        prompt: "This command line tool will utilize Twofish encryption to conduct: port scanning, file transfers, remote administration, banner grabbing, proxying, or listening..."
         answer: What is Cryptcat?
       - value: 300
         prompt: Nmap scans these ports by default.
@@ -64,9 +64,10 @@ categories:
         prompt: These are uniquely identifying characteristics of known malware/threats that can be compared against to find malicious activity.
         answer: What are signatures?
       - value: 200
-        prompt: This is the event classification to describe the following scenario:
-                My IDS alerts with the following message: “BRUTE FORCE LOGIN DETECTED”. 
-                Upon inspection, it is revealed that a user simply forgot their password and made too many attempts.
+        prompt: |
+          This is the event classification to describe the following scenario:
+          My IDS alerts with the following message: “BRUTE FORCE LOGIN DETECTED”.
+          Upon inspection, it is revealed that a user simply forgot their password and made too many attempts.
         answer: What is a false positive?
       - value: 300
         prompt: Using a series of 0x90 opcodes, I can facilitate this type of attack.
