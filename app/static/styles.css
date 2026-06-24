@@ -676,13 +676,12 @@ body[data-role="teacher"] .score-row {
   color: var(--accent);
   font-size: 28px;
   font-weight: 900;
-  transform-style: preserve-3d;
-  transition: transform 220ms ease, opacity 220ms ease, background 220ms ease;
+  transition: opacity 220ms ease, background 220ms ease, box-shadow 220ms ease;
 }
 
 .presentation-tile.active {
-  transform: rotateY(180deg) scale(1.04);
   outline: 3px solid var(--accent);
+  box-shadow: 0 0 0 2px rgba(242, 201, 76, 0.25);
 }
 
 .presentation-tile.revealed,

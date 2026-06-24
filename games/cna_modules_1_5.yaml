@@ -7,8 +7,8 @@ categories:
   - name: Great White Wireshark
     clues:
       - value: 100
-        prompt: These are the three main port states Nmap might report.
-        answer: What are Open, Closed, and Filtered?
+        prompt: Name at least three possible port states that Nmap might report.
+        answer: What are Open, Closed, Filtered, Open|Filtered, Closed|Filtered, and Unfiltered?
       - value: 200
         prompt: "This command line tool will utilize Twofish encryption to conduct: port scanning, file transfers, remote administration, banner grabbing, proxying, or listening..."
         answer: What is Cryptcat?
@@ -19,7 +19,7 @@ categories:
         prompt: This method of facilitating a buffer overflow attack will cause the program to jump to a known pointer stored within a register which points to the controlled buffer and thus the shellcode.
         answer: What is a trampoline sled?
       - value: 500
-        prompt: This component of IPv6 creates a host's IP based on their MAC address. (FULL PROPER NAME)
+        prompt: This component of IPv6 allows hosts to automatically configure their own IP based on their MAC address. (FULL PROPER NAME)
         answer: What is Stateless Address Auto-configuration or SLAAC?
 
   - name: Where Are My Keys?
