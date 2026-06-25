@@ -645,6 +645,11 @@ body[data-role="teacher"] .score-row {
   font-weight: 900;
 }
 
+.presentation-score-row.score-negative em,
+.winner-row.score-negative strong {
+  color: var(--danger);
+}
+
 .presentation-clue {
   display: grid;
   gap: 20px;

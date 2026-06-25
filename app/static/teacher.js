@@ -300,7 +300,7 @@ function renderScores() {
     row.innerHTML = `
       <span>${team.name}${team.joined ? students : " (not joined)"}</span>
       <span class="score-total">${deltaLabel}<strong>$${score}</strong></span>
-      <input data-score-team="${team.name}" class="score-override-input" type="number" step="1" value="${score}" aria-label="${team.name} score">
+      <input data-score-team="${team.name}" class="score-override-input" type="number" step="100" value="${score}" aria-label="${team.name} score">
     `;
     scores.appendChild(row);
 

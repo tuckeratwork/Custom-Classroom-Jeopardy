@@ -189,6 +189,7 @@ def start_final_wager_phase(state: GameState) -> GameState:
     now = time.time()
     state.phase = "final_wager"
     state.current_clue_id = None
+    state.last_completed_clue_id = None
     state.buzz_winner = None
     state.buzz_winner_student = None
     state.buzz_expires_at = None
@@ -632,7 +633,10 @@ def set_team_scores(state: GameState, scores: dict[str, int]) -> GameState:
 
 def reveal_final(state: GameState) -> GameState:
     if state.final.phase == "pending":
-        return start_final_wager_phase(state)
+        start_final_wager_phase(state)
+        if len(state.final.wagers) >= len(active_final_teams(state)):
+            return begin_final_answer_phase(state)
+        return state
     return begin_final_answer_phase(state)
 
 
@@ -646,6 +650,8 @@ def set_final_wagers(state: GameState, wagers: dict[str, int]) -> GameState:
             raise GameError(f"wager for {team_name} must be non-negative")
     state.final.wagers = dict(wagers)
     state.final.wager_submitted_by.update({team_name: "Teacher" for team_name in wagers})
+    if state.final.phase == "wager" and len(state.final.wagers) >= len(active_final_teams(state)):
+        begin_final_answer_phase(state)
     return state
 
 

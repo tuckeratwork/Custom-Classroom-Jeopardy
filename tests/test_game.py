@@ -495,6 +495,36 @@ def test_final_uses_joined_student_teams_only() -> None:
     assert state.final.wagers == {"Red Team": 500, "Blue Team": 500}
 
 
+def test_final_manual_wager_override_works_without_joined_students() -> None:
+    state = make_state("TEST23")
+
+    reveal_final(state)
+    set_final_wagers(state, {"Red Team": 300, "Blue Team": 700})
+
+    assert state.phase == "final_answer"
+    assert state.final.phase == "answer"
+    assert state.final.wagers == {"Red Team": 300, "Blue Team": 700}
+
+
+def test_starting_final_clears_last_completed_clue() -> None:
+    state = make_state("TEST24")
+    join_classroom(state)
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=True)
+    assert state.last_completed_clue_id == clue.id
+
+    reveal_final(state)
+
+    assert state.last_completed_clue_id is None
+
+
 def test_public_state_hides_final_category_until_wagers_are_locked() -> None:
     state = make_state("TEST18")
     join_classroom(state)

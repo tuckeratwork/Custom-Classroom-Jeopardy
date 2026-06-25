@@ -159,7 +159,7 @@ function renderScores() {
   const scores = $("board-scores");
   const teams = [...state.teams].sort((left, right) => displayScore(right) - displayScore(left));
   scores.innerHTML = teams.map((team, index) => `
-    <div class="presentation-score-row">
+    <div class="presentation-score-row ${displayScore(team) < 0 ? "score-negative" : ""}">
       <span>${index + 1}</span>
       <strong>${escapeHtml(team.name)}</strong>
       <em>$${displayScore(team)}</em>
@@ -201,7 +201,7 @@ function renderGameBoard() {
 function renderClue() {
   const clue = currentClue();
   const board = $("board-clue");
-  if (state.phase?.startsWith("final")) {
+  if (state.final?.phase && state.final.phase !== "pending") {
     board.classList.add("presentation-clue-card-open");
     const hidden = state.final.phase === "pending" || state.final.phase === "wager";
     board.innerHTML = `
@@ -356,6 +356,9 @@ function revealTeam(stage, team, index, total) {
   const finalScore = finalScoreFor(team);
   const row = document.createElement("div");
   row.className = `winner-row ${winner ? "winner-row-champion" : ""}`;
+  if (finalScore < 0) {
+    row.classList.add("score-negative");
+  }
   if (!shouldSpin) {
     row.innerHTML = `<small>In ${ordinal(place)} place we have:</small><span>${escapeHtml(team.name)}</span><strong>$${finalScore}</strong>`;
     stage.appendChild(row);
