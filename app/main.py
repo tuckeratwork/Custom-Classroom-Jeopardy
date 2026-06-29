@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 import secrets
 import base64
+import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -27,17 +28,20 @@ from .game import (
     remove_student,
     reset_buzzer,
     reset_buzzer_rotation,
+    reset_final,
     reveal_final,
     score_current_clue,
     score_final,
     select_clue,
     set_auto_random,
+    set_reactions,
     set_team_scores,
     set_final_wagers,
     submit_final_answer,
     submit_final_wager,
     submit_daily_double_answer,
     submit_daily_double_wager,
+    validate_reaction,
 )
 from .models import (
     AutoRandomRequest,
@@ -50,6 +54,8 @@ from .models import (
     FinalWagerRequest,
     FinalWagersRequest,
     JoinRequest,
+    ReactionRequest,
+    ReactionsToggleRequest,
     ScoreClueRequest,
     ScoreOverrideRequest,
     SelectClueRequest,
@@ -67,6 +73,8 @@ templates = Jinja2Templates(directory="app/templates")
 
 store = GameStore(os.getenv("JEOPARDY_DB", "jeopardy.db"))
 manager = ConnectionManager()
+reaction_cooldowns: dict[tuple[str, str, str], float] = {}
+REACTION_COOLDOWN_SECONDS = 1.5
 
 
 def teacher_accounts() -> dict[str, str]:
@@ -168,6 +176,19 @@ async def student_page(request: Request) -> HTMLResponse:
 @app.get("/board", response_class=HTMLResponse)
 async def board_page(request: Request, teacher: str = Depends(current_teacher)) -> HTMLResponse:
     return templates.TemplateResponse("board.html", {"request": request})
+
+
+@app.get("/game-assets/{asset_path:path}")
+async def game_asset(asset_path: str) -> FileResponse:
+    assets_root = Path("games/assets").resolve()
+    requested = (assets_root / asset_path).resolve()
+    try:
+        requested.relative_to(assets_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="asset not found") from exc
+    if not requested.is_file():
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(requested)
 
 
 @app.get("/api/game/latest")
@@ -425,6 +446,51 @@ async def auto_random_advance_route(payload: SessionRequest, teacher: str = Depe
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/reactions/toggle")
+async def reactions_toggle_route(payload: ReactionsToggleRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: set_reactions(current, payload.enabled),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/reactions/send")
+async def reaction_send_route(payload: ReactionRequest) -> dict:
+    try:
+        state = store.get(payload.session_code)
+        side = validate_reaction(state, payload.team_name, payload.student_name, payload.emoji)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    cooldown_key = (
+        state.session_code,
+        payload.team_name.strip().lower(),
+        payload.student_name.strip().lower(),
+    )
+    now = time.time()
+    if now - reaction_cooldowns.get(cooldown_key, 0) < REACTION_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail="slow down before sending another reaction")
+    reaction_cooldowns[cooldown_key] = now
+    await manager.broadcast(
+        state.session_code,
+        {
+            "type": "emoji_reaction",
+            "emoji": payload.emoji,
+            "side": side,
+            "target_team": state.buzz_winner,
+            "target_student": state.buzz_winner_student,
+        },
+    )
+    return {"ok": True}
+
+
 @app.post("/api/scores")
 async def set_scores_route(payload: ScoreOverrideRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
@@ -547,6 +613,18 @@ async def final_score_route(payload: FinalScoreRequest, teacher: str = Depends(c
 async def final_calculate_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
         state = store.update(payload.session_code, calculate_final_winners)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/final/reset")
+async def final_reset_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
+    try:
+        state = store.update(payload.session_code, reset_final)
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
     except GameError as exc:

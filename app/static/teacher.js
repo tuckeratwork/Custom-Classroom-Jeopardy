@@ -450,6 +450,15 @@ function findCurrentClue() {
   return null;
 }
 
+function teamByName(teamName) {
+  return state.teams.find((team) => team.name === teamName) || null;
+}
+
+function wagerLimitForTeam(teamName) {
+  const score = teamByName(teamName)?.score || 0;
+  return score >= 500 ? score : 500;
+}
+
 function renderControls() {
   const clue = findCurrentClue();
   const current = $("current-clue");
@@ -484,7 +493,21 @@ function renderControls() {
     }
   }
   dailyControls.classList.toggle("hidden", !clue?.is_daily_double);
+  if (clue?.is_daily_double) {
+    const wagerInput = $("wager");
+    const dailyTeam = state.daily_double.team_name || $("score-team").value;
+    const maxWager = wagerLimitForTeam(dailyTeam);
+    wagerInput.max = String(maxWager);
+    wagerInput.value = state.daily_double.wager ?? Math.min(clue.value, maxWager);
+    wagerInput.title = teamByName(dailyTeam)?.score < 500
+      ? `This team has less than $500, so the maximum wager is $500.`
+      : `Maximum wager: $${maxWager}.`;
+  } else {
+    $("wager").removeAttribute("max");
+    $("wager").title = "";
+  }
   $("auto-random-toggle").checked = Boolean(state.auto_random_enabled);
+  $("reactions-toggle").checked = Boolean(state.reactions_enabled);
   $("show-eligible-toggle").checked = showEligibleStudents;
   $("reset-buzzer").textContent = "Reset buzzers";
   renderRotationStatus();
@@ -647,8 +670,16 @@ function renderFinal() {
     const nextButton = $("next-final-reveal");
     if (nextButton) {
       nextButton.textContent = "Reveal Next Place";
-      nextButton.disabled = false;
+      nextButton.disabled = true;
     }
+  }
+  const resetButton = $("reset-final");
+  if (resetButton) {
+    resetButton.disabled = phase === "pending";
+  }
+  const calculateButton = $("calculate-winners");
+  if (calculateButton) {
+    calculateButton.disabled = phase !== "review";
   }
 
   const wagers = $("final-wagers");
@@ -662,7 +693,7 @@ function renderFinal() {
     const submitted = state.final.submissions[team.name] ?? "";
     row.innerHTML = `
       <span><strong>${escapeHtml(team.name)}</strong><br><small>Leader: ${escapeHtml(leader)}</small></span>
-      <input data-wager-team="${team.name}" type="number" min="0" value="${wager}">
+      <span><small>Wager</small><br><strong>$${wager}</strong></span>
       <label><input data-final-team="${team.name}" type="checkbox" ${scored === true ? "checked" : ""}> Correct</label>
       <div class="final-submission">${submitted ? escapeHtml(submitted) : "<span class=\"muted\">No answer submitted</span>"}</div>
     `;
@@ -850,6 +881,13 @@ $("show-eligible-toggle").addEventListener("change", (event) => {
   renderRotationStatus();
 });
 
+$("reactions-toggle").addEventListener("change", (event) => {
+  api("/api/reactions/toggle", {
+    session_code: sessionCode(),
+    enabled: event.target.checked,
+  });
+});
+
 $("continue-clue").addEventListener("click", () => {
   api("/api/clue/continue", { session_code: sessionCode() });
 });
@@ -885,16 +923,12 @@ $("lock-daily-double").addEventListener("click", () => {
   });
 });
 
-$("save-wagers").addEventListener("click", () => {
-  const wagers = {};
-  document.querySelectorAll("[data-wager-team]").forEach((input) => {
-    wagers[input.dataset.wagerTeam] = Number(input.value || 0);
-  });
-  api("/api/final/wagers", { session_code: sessionCode(), wagers });
-});
-
-$("reveal-final").addEventListener("click", () => {
-  api("/api/final/reveal", { session_code: sessionCode() });
+$("reset-final").addEventListener("click", () => {
+  if (!window.confirm("Reset Final Jeopardy? Students will need to lock wagers and submit answers again.")) {
+    return;
+  }
+  api("/api/final/reset", { session_code: sessionCode() })
+    .catch((error) => window.alert(error.message));
 });
 
 $("calculate-winners").addEventListener("click", () => {
@@ -903,11 +937,13 @@ $("calculate-winners").addEventListener("click", () => {
     results[input.dataset.finalTeam] = input.checked;
   });
   api("/api/final/score", { session_code: sessionCode(), results })
-    .then(() => api("/api/final/calculate", { session_code: sessionCode() }));
+    .then(() => api("/api/final/calculate", { session_code: sessionCode() }))
+    .catch((error) => window.alert(error.message));
 });
 
 $("next-final-reveal").addEventListener("click", () => {
-  api("/api/final/reveal-next", { session_code: sessionCode() });
+  api("/api/final/reveal-next", { session_code: sessionCode() })
+    .catch((error) => window.alert(error.message));
 });
 
 renderTeamNameFields();

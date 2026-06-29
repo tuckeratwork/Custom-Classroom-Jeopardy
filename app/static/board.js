@@ -8,6 +8,7 @@ let hasSeenScoreState = false;
 let lastPresentedClueId = null;
 let confettiSignature = null;
 let autoRandomAdvanceInFlight = false;
+let lastZoomClueId = null;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -28,6 +29,35 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function imageUrl(path) {
+  if (!path) {
+    return "";
+  }
+  if (/^(https?:)?\/\//.test(path) || path.startsWith("/")) {
+    return path;
+  }
+  return `/game-assets/${encodeURI(path)}`;
+}
+
+function questionImageMarkup(clue) {
+  const image = imageUrl(clue?.image);
+  return image ? `<img class="question-image presentation-question-image" src="${escapeHtml(image)}" alt="">` : "";
+}
+
+function spawnReaction(emoji, side) {
+  const stream = $(side === "support" ? "reaction-stream-right" : "reaction-stream-left");
+  if (!stream) {
+    return;
+  }
+  const item = document.createElement("span");
+  item.className = "floating-reaction";
+  item.textContent = emoji;
+  item.style.left = `${20 + Math.random() * 55}%`;
+  item.style.animationDuration = `${1900 + Math.random() * 900}ms`;
+  stream.appendChild(item);
+  window.setTimeout(() => item.remove(), 3000);
 }
 
 function getAudioContext() {
@@ -130,7 +160,14 @@ function connectSocket(code) {
   }
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   socket = new WebSocket(`${scheme}://${location.host}/ws/game/${code}`);
-  socket.onmessage = () => fetchState(code);
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === "emoji_reaction") {
+      spawnReaction(message.emoji, message.side);
+      return;
+    }
+    fetchState(code);
+  };
 }
 
 function currentClue() {
@@ -167,6 +204,43 @@ function renderScores() {
   `).join("");
 }
 
+function animateTileZoom(tile) {
+  if (!tile) {
+    return;
+  }
+  const start = tile.getBoundingClientRect();
+  const inset = 24;
+  const end = {
+    left: inset,
+    top: inset,
+    width: window.innerWidth - inset * 2,
+    height: window.innerHeight - inset * 2,
+  };
+  if (!start.width || !end.width || !end.height) {
+    return;
+  }
+  const zoom = document.createElement("div");
+  zoom.className = "tile-zoom";
+  zoom.textContent = tile.textContent;
+  Object.assign(zoom.style, {
+    left: `${start.left}px`,
+    top: `${start.top}px`,
+    width: `${start.width}px`,
+    height: `${start.height}px`,
+  });
+  document.body.appendChild(zoom);
+  window.requestAnimationFrame(() => {
+    Object.assign(zoom.style, {
+      left: `${end.left}px`,
+      top: `${end.top}px`,
+      width: `${end.width}px`,
+      height: `${end.height}px`,
+    });
+    zoom.classList.add("tile-zoom-expanded");
+  });
+  window.setTimeout(() => zoom.remove(), 520);
+}
+
 function renderGameBoard() {
   const board = $("presentation-board");
   const columns = state.categories.length;
@@ -192,6 +266,10 @@ function renderGameBoard() {
         tile.textContent = clue.revealed ? "" : `$${clue.value}`;
         tile.classList.toggle("revealed", clue.revealed);
         tile.classList.toggle("active", state.current_clue_id === clue.id);
+        if (state.current_clue_id === clue.id && lastZoomClueId !== clue.id) {
+          animateTileZoom(tile);
+          lastZoomClueId = clue.id;
+        }
       }
       board.appendChild(tile);
     });
@@ -202,6 +280,7 @@ function renderClue() {
   const clue = currentClue();
   const board = $("board-clue");
   if (state.final?.phase && state.final.phase !== "pending") {
+    document.body.classList.remove("presentation-question-active");
     board.classList.add("presentation-clue-card-open");
     const hidden = state.final.phase === "pending" || state.final.phase === "wager";
     board.innerHTML = `
@@ -212,11 +291,14 @@ function renderClue() {
     return;
   }
   if (!clue) {
+    document.body.classList.remove("presentation-question-active");
+    lastZoomClueId = null;
     const completedClue = findClueById(state.last_completed_clue_id);
     if (completedClue?.answer) {
       board.innerHTML = `
         <p class="eyebrow">${completedClue.is_daily_double ? "Daily Double" : `$${completedClue.value}`}</p>
         <h2>${escapeHtml(completedClue.prompt || "")}</h2>
+        ${questionImageMarkup(completedClue)}
         <div class="presentation-answer">${escapeHtml(completedClue.answer)}</div>
       `;
       return;
@@ -226,18 +308,22 @@ function renderClue() {
     lastPresentedClueId = null;
     return;
   }
-  const showAnswer = Date.now() < answerRevealUntil && Boolean(clue.answer);
-  const dailyDoubleHidden = clue.is_daily_double && !state.daily_double?.question_revealed;
+  document.body.classList.add("presentation-question-active");
   if (lastPresentedClueId !== clue.id) {
+    answerRevealUntil = 0;
     board.classList.remove("presentation-clue-card-open");
     window.requestAnimationFrame(() => board.classList.add("presentation-clue-card-open"));
     lastPresentedClueId = clue.id;
   } else {
     board.classList.add("presentation-clue-card-open");
   }
+  const showAnswer = Date.now() < answerRevealUntil && Boolean(clue.answer);
+  const dailyDoubleHidden = clue.is_daily_double && !state.daily_double?.question_revealed;
   board.innerHTML = `
     <p class="eyebrow">${clue.is_daily_double ? "Daily Double" : `$${clue.value}`}</p>
     <h2>${dailyDoubleHidden ? "Wager pending" : escapeHtml(clue.prompt)}</h2>
+    ${!dailyDoubleHidden ? questionImageMarkup(clue) : ""}
+    ${buzzWinnerMarkup()}
     ${autoRandomCountdownMarkup()}
     ${showAnswer && !dailyDoubleHidden ? `<div class="presentation-answer">${escapeHtml(clue.answer)}</div>` : ""}
   `;
@@ -249,6 +335,18 @@ function autoRandomCountdownMarkup() {
   }
   const remaining = Math.max(0, Math.ceil(state.auto_random_expires_at - Date.now() / 1000));
   return `<div class="presentation-auto-random">Random buzz in ${remaining}</div>`;
+}
+
+function buzzWinnerMarkup() {
+  if (!state.buzz_winner) {
+    return "";
+  }
+  return `
+    <div class="presentation-buzz-winner">
+      <span>${escapeHtml(state.buzz_winner_student || "Student")}</span>
+      <strong>${escapeHtml(state.buzz_winner)}</strong>
+    </div>
+  `;
 }
 
 async function advanceAutoRandomIfExpired() {

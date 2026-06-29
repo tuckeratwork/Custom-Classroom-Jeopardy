@@ -9,10 +9,13 @@ class ClueConfig(BaseModel):
     value: int = Field(gt=0)
     prompt: str = Field(min_length=1)
     answer: str = Field(min_length=1)
+    image: Optional[str] = None
 
-    @field_validator("prompt", "answer", mode="before")
+    @field_validator("prompt", "answer", "image", mode="before")
     @classmethod
-    def coerce_text(cls, value: object) -> str:
+    def coerce_text(cls, value: object) -> object:
+        if value is None:
+            return None
         return str(value)
 
 
@@ -69,6 +72,7 @@ class ClueState(BaseModel):
     value: int
     prompt: str
     answer: str
+    image: Optional[str] = None
     revealed: bool = False
     is_daily_double: bool = False
 
@@ -140,6 +144,7 @@ class GameState(BaseModel):
     buzz_expires_at: Optional[float] = None
     auto_random_enabled: bool = False
     auto_random_expires_at: Optional[float] = None
+    reactions_enabled: bool = True
     last_buzz_team: Optional[str] = None
     last_buzz_student: Optional[str] = None
     buzz_order: List[str] = Field(default_factory=list)
@@ -189,6 +194,18 @@ class SessionRequest(BaseModel):
 class AutoRandomRequest(BaseModel):
     session_code: str
     enabled: bool
+
+
+class ReactionsToggleRequest(BaseModel):
+    session_code: str
+    enabled: bool
+
+
+class ReactionRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str = Field(max_length=80)
+    emoji: str = Field(min_length=1, max_length=8)
 
 
 class StudentRequest(BaseModel):

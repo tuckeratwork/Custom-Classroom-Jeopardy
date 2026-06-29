@@ -12,8 +12,10 @@ from app.game import (
     create_game_state,
     join_team,
     load_game_config,
+    lock_daily_double_wager,
     remove_student,
     random_buzz_eligible,
+    reset_final,
     reset_buzzer,
     reset_buzzer_rotation,
     reveal_final,
@@ -21,13 +23,16 @@ from app.game import (
     score_final,
     select_clue,
     set_auto_random,
+    set_reactions,
     set_team_scores,
     set_final_wagers,
     submit_daily_double_answer,
     submit_daily_double_wager,
+    submit_final_answer,
     submit_final_wager,
     advance_final_reveal,
     public_state,
+    validate_reaction,
 )
 
 GAME_PATH = "games/cna_modules_6_9.yaml"
@@ -83,6 +88,41 @@ def test_loads_cna_modules_1_5_config() -> None:
     config = load_game_config("games/cna_modules_1_5.yaml")
     assert config.title == "The REAL CNA Modules 1 - 5"
     assert len(config.categories) == 5
+
+
+def test_loads_image_test_config() -> None:
+    config = load_game_config("games/image_test.yaml")
+    assert config.title == "Image Test Jeopardy"
+    assert config.categories[0].clues[0].image == "test_images/network_map.svg"
+
+
+def test_clue_image_config_is_copied_to_state(tmp_path: Path) -> None:
+    game_yaml = tmp_path / "image-game.yaml"
+    game_yaml.write_text(
+        """
+title: Image Game
+teams:
+  - Red Team
+  - Blue Team
+categories:
+  - name: Tools
+    clues:
+      - value: 100
+        prompt: Identify this tool.
+        image: module/tool.png
+        answer: What is Wireshark?
+final:
+  category: Final
+  prompt: Final prompt
+  answer: Final answer
+""",
+        encoding="utf-8",
+    )
+
+    state = create_game_state(load_game_config(game_yaml), session_code="IMG")
+
+    clue = state.categories[0].clues[0]
+    assert clue.image == "module/tool.png"
 
 
 def test_game_state_can_use_runtime_team_names() -> None:
@@ -183,6 +223,88 @@ def test_daily_double_leader_locks_wager_and_submits_answer() -> None:
     submit_daily_double_answer(state, "Red Team", "Alice", "A test answer")
     assert state.daily_double.submission == "A test answer"
     assert state.daily_double.submitted_by == "Alice"
+
+
+def test_daily_double_wager_uses_500_floor_for_low_scores() -> None:
+    state = make_state("TEST31")
+    join_classroom(state)
+    daily = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if clue.is_daily_double
+    )
+    state.last_buzz_team = "Red Team"
+    state.last_buzz_student = "Alice"
+    select_clue(state, daily.id)
+
+    with pytest.raises(GameError):
+        submit_daily_double_wager(state, "Red Team", "Alice", 501)
+
+    submit_daily_double_wager(state, "Red Team", "Alice", 500)
+    assert state.daily_double.wager == 500
+
+
+def test_daily_double_wager_cannot_exceed_team_score_above_500() -> None:
+    state = make_state("TEST32")
+    join_classroom(state)
+    daily = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if clue.is_daily_double
+    )
+    red = next(team for team in state.teams if team.name == "Red Team")
+    red.score = 700
+    state.last_buzz_team = "Red Team"
+    state.last_buzz_student = "Alice"
+    select_clue(state, daily.id)
+
+    with pytest.raises(GameError):
+        submit_daily_double_wager(state, "Red Team", "Alice", 701)
+
+    submit_daily_double_wager(state, "Red Team", "Alice", 700)
+    assert state.daily_double.wager == 700
+
+
+def test_daily_double_scoring_uses_locked_student_wager_over_teacher_form_value() -> None:
+    state = make_state("TEST33")
+    join_classroom(state)
+    daily = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if clue.is_daily_double
+    )
+    state.last_buzz_team = "Red Team"
+    state.last_buzz_student = "Alice"
+    select_clue(state, daily.id)
+    submit_daily_double_wager(state, "Red Team", "Alice", 300)
+
+    score_current_clue(state, correct=True, team_name="Red Team", wager=0)
+
+    red = next(team for team in state.teams if team.name == "Red Team")
+    assert red.score == 300
+    assert state.score_event is not None
+    assert state.score_event.delta == 300
+
+
+def test_teacher_daily_double_wager_uses_same_limit() -> None:
+    state = make_state("TEST34")
+    join_classroom(state)
+    daily = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if clue.is_daily_double
+    )
+    select_clue(state, daily.id, selecting_team="Blue Team")
+
+    with pytest.raises(GameError):
+        lock_daily_double_wager(state, "Blue Team", 501)
+
+    lock_daily_double_wager(state, "Blue Team", 500)
+    assert state.daily_double.wager == 500
 
 
 def test_daily_double_rejects_non_leader_submission() -> None:
@@ -292,6 +414,79 @@ def test_auto_random_timer_clears_when_student_buzzes() -> None:
     buzz(state, "Red Team", "Alice")
 
     assert state.auto_random_expires_at is None
+
+
+def test_manual_buzz_gets_ten_seconds_and_random_buzz_gets_fifteen(monkeypatch) -> None:
+    state = make_state("TEST27")
+    clues = [
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    ]
+    join_classroom(state)
+    monkeypatch.setattr("app.game.time.time", lambda: 1000)
+    monkeypatch.setattr("app.game.random.choice", lambda choices: choices[0])
+
+    select_clue(state, clues[0].id)
+    buzz(state, "Red Team", "Alice")
+    assert state.buzz_expires_at == 1010
+    score_current_clue(state, correct=True)
+
+    select_clue(state, clues[1].id)
+    random_buzz_eligible(state)
+    assert state.buzz_expires_at == 1015
+
+
+def test_reactions_validate_support_and_opposition() -> None:
+    state = make_state("TEST25")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    join_classroom(state)
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+
+    assert validate_reaction(state, "Red Team", "Ari", "👏") == "support"
+    assert validate_reaction(state, "Blue Team", "Ben", "🍅") == "opposition"
+    with pytest.raises(GameError):
+        validate_reaction(state, "Red Team", "Alice", "👏")
+    with pytest.raises(GameError):
+        validate_reaction(state, "Red Team", "Ari", "🍅")
+    with pytest.raises(GameError):
+        validate_reaction(state, "Blue Team", "Ben", "👏")
+
+
+def test_reactions_can_be_disabled_and_skip_daily_double() -> None:
+    state = make_state("TEST26")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    daily = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if clue.is_daily_double
+    )
+    join_classroom(state)
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+    set_reactions(state, False)
+
+    with pytest.raises(GameError):
+        validate_reaction(state, "Red Team", "Ari", "👏")
+
+    set_reactions(state, True)
+    score_current_clue(state, correct=True)
+    select_clue(state, daily.id)
+    with pytest.raises(GameError):
+        validate_reaction(state, "Red Team", "Ari", "👏")
 
 
 def test_wrong_answer_can_open_one_steal_without_rotation_or_penalty() -> None:
@@ -561,9 +756,14 @@ def test_final_jeopardy_scoring_once() -> None:
     join_classroom(state)
     reveal_final(state)
     assert state.phase == "final_wager"
-    set_final_wagers(state, {"Red Team": 500, "Blue Team": 200})
-    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 500)
+    submit_final_wager(state, "Blue Team", "Ben", 200)
     assert state.phase == "final_answer"
+    submit_final_answer(state, "Red Team", "Alice", "A correct response")
+    submit_final_answer(state, "Blue Team", "Ben", "An incorrect response")
+    assert state.phase == "final_review"
     score_final(state, {"Red Team": True, "Blue Team": False})
     calculate_final_winners(state)
     calculate_final_winners(state)
@@ -579,6 +779,42 @@ def test_final_jeopardy_scoring_once() -> None:
     assert state.final.reveal_spinning_index is None
     assert state.final.reveal_step == 1
     assert state.phase == "complete"
+
+
+def test_final_cannot_score_or_calculate_before_review() -> None:
+    state = make_state("TEST35")
+    join_classroom(state)
+    reveal_final(state)
+
+    with pytest.raises(GameError):
+        score_final(state, {"Red Team": True, "Blue Team": False})
+
+    with pytest.raises(GameError):
+        calculate_final_winners(state)
+
+
+def test_reset_final_clears_wagers_submissions_and_results() -> None:
+    state = make_state("TEST36")
+    join_classroom(state)
+    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 500)
+    submit_final_wager(state, "Blue Team", "Ben", 200)
+    submit_final_answer(state, "Red Team", "Alice", "A correct response")
+    submit_final_answer(state, "Blue Team", "Ben", "An incorrect response")
+    score_final(state, {"Red Team": True, "Blue Team": False})
+    calculate_final_winners(state)
+
+    reset_final(state)
+
+    assert state.phase == "final_wager"
+    assert state.final.phase == "wager"
+    assert state.final.wagers == {}
+    assert state.final.submissions == {}
+    assert state.final.scored == {}
+    assert state.final.final_scores == {}
+    assert state.final.results_revealed is False
 
 
 def test_invalid_yaml_reports_error(tmp_path: Path) -> None:

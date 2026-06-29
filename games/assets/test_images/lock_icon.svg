@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 520" role="img" aria-label="Padlock">
+  <rect width="700" height="520" fill="#10151c"/>
+  <path d="M210 240v-70c0-84 58-140 140-140s140 56 140 140v70" fill="none" stroke="#32d583" stroke-width="42" stroke-linecap="round"/>
+  <rect x="155" y="210" width="390" height="245" rx="28" fill="#2457c5" stroke="#f2c94c" stroke-width="12"/>
+  <circle cx="350" cy="315" r="34" fill="#f2c94c"/>
+  <rect x="333" y="330" width="34" height="75" rx="14" fill="#f2c94c"/>
+  <text x="350" y="492" fill="#f5f7fb" font-family="Arial, sans-serif" font-size="34" font-weight="700" text-anchor="middle">Encryption</text>
+</svg>

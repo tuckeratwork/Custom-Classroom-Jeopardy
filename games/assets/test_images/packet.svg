@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 430" role="img" aria-label="Packet header diagram">
+  <rect width="760" height="430" fill="#0f1720"/>
+  <rect x="60" y="80" width="640" height="250" rx="12" fill="#17202b" stroke="#334155" stroke-width="6"/>
+  <g font-family="Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <rect x="90" y="120" width="160" height="90" rx="8" fill="#2457c5"/>
+    <text x="170" y="174" fill="#f2c94c" font-size="28">Source</text>
+    <rect x="260" y="120" width="160" height="90" rx="8" fill="#1b2f63"/>
+    <text x="340" y="174" fill="#f2c94c" font-size="28">Dest</text>
+    <rect x="430" y="120" width="240" height="90" rx="8" fill="#26364c"/>
+    <text x="550" y="174" fill="#f2c94c" font-size="28">Protocol</text>
+    <rect x="90" y="225" width="580" height="70" rx="8" fill="#123026"/>
+    <text x="380" y="270" fill="#32d583" font-size="30">Payload</text>
+  </g>
+  <text x="380" y="385" fill="#f5f7fb" font-family="Arial, sans-serif" font-size="30" font-weight="700" text-anchor="middle">Packet Inspection</text>
+</svg>

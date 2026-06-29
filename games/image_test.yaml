@@ -1,0 +1,41 @@
+title: Image Test Jeopardy
+teams:
+  - Red Team
+  - Blue Team
+
+categories:
+  - name: Picture This
+    clues:
+      - value: 100
+        prompt: This diagram shows traffic moving between clients and servers through these network devices.
+        image: test_images/network_map.svg
+        answer: What are switches, firewalls, and IDS sensors?
+      - value: 200
+        prompt: This symbol commonly represents protecting data with this security control.
+        image: test_images/lock_icon.svg
+        answer: What is encryption?
+      - value: 300
+        prompt: This diagram separates addressing and protocol information from the carried data.
+        image: test_images/packet.svg
+        answer: What is packet structure or packet inspection?
+
+  - name: No Image Control
+    clues:
+      - value: 100
+        prompt: This clue has no image and confirms regular text-only clues still work.
+        answer: What is a normal clue?
+      - value: 200
+        prompt: This is the classroom role that controls scoring and reveal behavior.
+        answer: What is the teacher?
+      - value: 300
+        prompt: This screen is shown to the class instead of the teacher controls.
+        answer: What is the presentation board?
+
+daily_double:
+  prompt: This test Daily Double intentionally has no image.
+  answer: What is the Daily Double?
+
+final:
+  category: Image Test Final
+  prompt: Name one thing verified by this image test game.
+  answer: What is image rendering on clues?

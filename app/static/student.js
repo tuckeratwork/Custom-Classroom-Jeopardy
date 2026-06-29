@@ -39,6 +39,41 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+const supportEmojis = ["👏", "🔥", "💪", "🙌", "⭐"];
+const oppositionEmojis = ["🤔", "💀", "🍅", "💩", "🥀"];
+
+function imageUrl(path) {
+  if (!path) {
+    return "";
+  }
+  if (/^(https?:)?\/\//.test(path) || path.startsWith("/")) {
+    return path;
+  }
+  return `/game-assets/${encodeURI(path)}`;
+}
+
+function clueContentMarkup(clue) {
+  const image = imageUrl(clue?.image);
+  return `
+    <div>${escapeHtml(clue?.prompt || "")}</div>
+    ${image ? `<img class="question-image student-question-image" src="${escapeHtml(image)}" alt="">` : ""}
+  `;
+}
+
+function spawnReaction(emoji, side) {
+  const stream = $(side === "support" ? "reaction-stream-right" : "reaction-stream-left");
+  if (!stream) {
+    return;
+  }
+  const item = document.createElement("span");
+  item.className = "floating-reaction";
+  item.textContent = emoji;
+  item.style.left = `${20 + Math.random() * 55}%`;
+  item.style.animationDuration = `${1800 + Math.random() * 700}ms`;
+  stream.appendChild(item);
+  window.setTimeout(() => item.remove(), 2800);
+}
+
 function countdownText(expiresAt) {
   if (!expiresAt) {
     return "";
@@ -219,6 +254,10 @@ function connectSocket() {
       handleSessionEnded(message.new_session_code);
     } else if (message.type === "student_removed") {
       handleStudentRemoved(message);
+    } else if (message.type === "emoji_reaction") {
+      if (amActiveResponder()) {
+        spawnReaction(message.emoji, message.side);
+      }
     }
   };
 }
@@ -239,6 +278,10 @@ function currentClue() {
 
 function myTeam() {
   return state?.teams?.find((team) => team.name === teamName) || null;
+}
+
+function amActiveResponder() {
+  return state?.buzz_winner === teamName && state?.buzz_winner_student === studentName;
 }
 
 async function loadTeamsForCode() {
@@ -265,6 +308,10 @@ async function loadTeamsForCode() {
 function finalWagerLimit() {
   const score = myTeam()?.score || 0;
   return score >= 500 ? score : 500;
+}
+
+function wagerLimit() {
+  return finalWagerLimit();
 }
 
 function isDailyDoubleLeader() {
@@ -300,7 +347,9 @@ function renderTimer() {
     return;
   }
   const timer = $("buzz-timer");
+  const card = $("buzzer-card");
   const remaining = timerRemaining();
+  card.classList.remove("buzzer-card-warning", "buzzer-card-expired");
   if (remaining === null || (!state.buzz_winner && !state.daily_double?.question_revealed)) {
     timer.classList.add("hidden");
     timer.textContent = "10";
@@ -310,6 +359,10 @@ function renderTimer() {
   timer.classList.remove("hidden");
   timer.classList.toggle("buzz-timer-expired", remaining <= 0);
   timer.textContent = String(remaining);
+  if (amActiveResponder()) {
+    card.classList.toggle("buzzer-card-warning", remaining > 0 && remaining <= 2);
+    card.classList.toggle("buzzer-card-expired", remaining <= 0);
+  }
 
   const signature = `${state.buzz_winner || state.daily_double?.team_name}:${state.buzz_winner_student || "daily-double"}:${state.buzz_expires_at || state.daily_double?.answer_expires_at}`;
   if (remaining <= 0 && expiredTimerSignature !== signature) {
@@ -376,10 +429,13 @@ function renderDailyDoubleAction(clue) {
     return;
   }
   if (!wagerLocked) {
+    const maxWager = wagerLimit();
+    const teamScore = myTeam()?.score || 0;
     action.innerHTML = `
+      ${teamScore < 500 ? `<p class="notice-text">Your team has less than $500, so you may wager up to $500.</p>` : ""}
       <p id="daily-double-error" class="error-text"></p>
       <label for="daily-double-wager-input">Daily Double wager</label>
-      <input id="daily-double-wager-input" type="number" min="0" value="${clue.value}" inputmode="numeric">
+      <input id="daily-double-wager-input" type="number" min="0" max="${maxWager}" value="${Math.min(clue.value, maxWager)}" inputmode="numeric">
       <button id="submit-daily-double-wager">Lock wager</button>
     `;
     $("submit-daily-double-wager")?.addEventListener("click", submitDailyDoubleWager);
@@ -589,6 +645,36 @@ function renderFinalMode() {
   renderFinalAction();
 }
 
+function canReact(clue) {
+  return Boolean(
+    state.reactions_enabled
+    && clue
+    && !clue.is_daily_double
+    && state.buzz_winner
+    && state.buzz_winner_student
+    && !(state.buzz_winner === teamName && state.buzz_winner_student === studentName)
+    && !(state.phase.startsWith("final") || state.phase === "complete")
+  );
+}
+
+function renderReactionControls(clue) {
+  const controls = $("reaction-controls");
+  controls.classList.add("hidden");
+  controls.innerHTML = "";
+  if (!canReact(clue)) {
+    return;
+  }
+  const supporting = state.buzz_winner === teamName;
+  const emojis = supporting ? supportEmojis : oppositionEmojis;
+  controls.classList.remove("hidden");
+  controls.innerHTML = `
+    <p>${supporting ? "Send some encouragement to your teammate!" : "Send some discouragement to your enemies!"}</p>
+    <div class="reaction-buttons">
+      ${emojis.map((emoji) => `<button type="button" data-reaction="${emoji}" aria-label="Send ${emoji}">${emoji}</button>`).join("")}
+    </div>
+  `;
+}
+
 async function advanceFinalIfExpired() {
   if (!state || finalAdvanceInFlight) {
     return;
@@ -633,6 +719,9 @@ function render() {
   }
   const clue = currentClue();
   const button = $("buzz-button");
+  const isActiveResponder = amActiveResponder();
+  $("buzzer-card").classList.toggle("buzzer-card-active", isActiveResponder);
+  $("responder-banner").classList.toggle("hidden", !isActiveResponder);
   const inFinal = state.phase.startsWith("final") || state.phase === "complete";
   if (inFinal) {
     $("student-clue").textContent = "Final Jeopardy";
@@ -645,11 +734,13 @@ function render() {
     stopMusic();
   } else if (clue.is_daily_double) {
     const isDailyDoubleTeam = state.daily_double.team_name === teamName;
-    $("student-clue").textContent = state.daily_double.question_revealed && isDailyDoubleTeam
-      ? clue.prompt
-      : isDailyDoubleTeam
+    if (state.daily_double.question_revealed && isDailyDoubleTeam) {
+      $("student-clue").innerHTML = clueContentMarkup(clue);
+    } else {
+      $("student-clue").textContent = isDailyDoubleTeam
         ? "Daily Double. Your leader will lock the wager."
         : "Daily Double.";
+    }
     button.disabled = true;
     if (state.daily_double.question_revealed) {
       stopMusic();
@@ -657,7 +748,7 @@ function render() {
       startMusic();
     }
   } else {
-    $("student-clue").textContent = clue.prompt;
+    $("student-clue").innerHTML = clueContentMarkup(clue);
     button.disabled = !canBuzz(clue);
     if (state.buzz_winner) {
       stopMusic();
@@ -668,7 +759,7 @@ function render() {
 
   if (state.buzz_winner === teamName) {
     $("student-status").textContent = state.buzz_winner_student === studentName
-      ? "You buzzed first."
+      ? "You are up. Give your answer."
       : `${state.buzz_winner_student || "A teammate"} buzzed first.`;
   } else if (state.buzz_winner) {
     $("student-status").textContent = `${state.buzz_winner_student || "A student"} from ${state.buzz_winner} buzzed first.`;
@@ -683,6 +774,7 @@ function render() {
   } else {
     $("student-status").textContent = "";
   }
+  $("student-status").classList.toggle("student-status-active", isActiveResponder);
 
   const scores = $("student-scores");
   scores.innerHTML = "";
@@ -700,6 +792,7 @@ function render() {
   renderTimer();
   renderScoreEvent();
   renderDailyDoubleAction(clue);
+  renderReactionControls(clue);
   renderFinalMode();
 }
 
@@ -707,8 +800,9 @@ async function submitDailyDoubleWager() {
   const input = $("daily-double-wager-input");
   const error = $("daily-double-error");
   const wager = Number(input.value || 0);
-  if (!Number.isInteger(wager) || wager < 0) {
-    error.textContent = "Enter a whole dollar amount of $0 or more.";
+  const maxWager = wagerLimit();
+  if (!Number.isInteger(wager) || wager < 0 || wager > maxWager) {
+    error.textContent = `Enter a whole dollar amount from $0 to $${maxWager}.`;
     input.focus();
     return;
   }
@@ -872,6 +966,35 @@ $("change-game").addEventListener("click", () => {
   localStorage.removeItem("jeopardy_session");
   sessionCode = "";
   showJoin();
+});
+
+$("reaction-controls").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-reaction]");
+  if (!button) {
+    return;
+  }
+  button.disabled = true;
+  const emoji = button.dataset.reaction;
+  const response = await fetch("/api/reactions/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      emoji,
+    }),
+  });
+  if (!response.ok && response.status !== 429) {
+    const data = await response.json();
+    $("student-status").textContent = data.detail || "Reaction did not send.";
+  }
+  if (response.ok) {
+    spawnReaction(emoji, teamName === state?.buzz_winner ? "support" : "opposition");
+  }
+  window.setTimeout(() => {
+    button.disabled = false;
+  }, 1500);
 });
 
 if (sessionCode && teamName && studentName) {
