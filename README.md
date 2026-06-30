@@ -51,9 +51,35 @@ hostname -I
 
 ## Editing A Game
 
-Edit `games/example.yaml` or create another YAML file with the same shape. YAML files in `games/` appear in the teacher console game dropdown.
+Edit one of the YAML files in `games/` or create another YAML file with the same shape. YAML files directly inside `games/` appear in the teacher console game dropdown.
 
 Numeric-looking answers such as `404` can be written with or without quotes.
+
+## Question Images
+
+Normal clues can include an image. Images appear on both the presentation board and the student buzzer screen when that clue is active.
+
+Put local image files under `games/assets/`, then reference them from the clue with a path relative to that folder:
+
+```yaml
+categories:
+  - name: Picture This
+    clues:
+      - value: 100
+        prompt: This diagram shows traffic moving between clients and servers.
+        image: test_images/network_map.svg
+        answer: What is a network map?
+```
+
+For that example, the file would live at:
+
+```text
+games/assets/test_images/network_map.svg
+```
+
+You can use common browser-supported image types such as `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, or `.svg`. You can also use a full image URL, but local files are usually more reliable for a classroom LAN game.
+
+Daily Double clues are generated from the `daily_double:` section and currently do not use clue images. If the randomly selected Daily Double was originally a clue with an image, that image is hidden for the Daily Double.
 
 ## How To Run A Game
 
@@ -84,19 +110,27 @@ The teacher console is the control room for the game.
 - **Reset buzzers** only clears the current buzz winner and timer. It does not score, reveal, or change steal state.
 - **Clear student rotation** lets all joined students buzz again if the rotation creates a stalemate.
 - **Random eligible buzz** randomly selects one currently eligible student and buzzes in for them.
-- **Auto-random eligible student after 15 seconds** starts a presentation-board countdown when a normal clue is selected. If no student buzzes before it reaches zero, the app randomly buzzes one eligible student.
+- **Auto-random eligible student after 15 seconds** starts a countdown when a normal clue is selected. If no student buzzes before it reaches zero, the app randomly buzzes one eligible student.
 - **Show eligible students** toggles the eligible student list. It is off by default to keep the teacher panel less cluttered.
 - **Eligible to buzz** shows which students can currently buzz based on the team rotation and steal lockout rules when that display is enabled.
+- **Emoji reactions** lets students send anonymous encouragement or playful opposition emojis while a normal clue has an active buzz winner. The answering student and presentation board see the emoji streams. Reactions are disabled for Daily Double and Final Jeopardy.
+- **Reset Final Jeopardy** restarts Final Jeopardy if something goes wrong. The teacher must confirm this action, and students will need to lock wagers and submit answers again.
+- **Calculate Final Scores** is only available after Final Jeopardy reaches review mode, meaning wagers are locked and answers have been submitted or timed out.
+- **Reveal Next Place** steps through the final results after scores have been calculated.
 
 ## Normal Clues
 
-The teacher selects a clue from the board. Students see the clue and may buzz from their own devices. The first buzz locks the clue and starts the answer timer.
+The teacher selects a clue from the board. Students see the clue and may buzz from their own devices. The selected tile expands into the active question on the presentation board. The first buzz locks the clue and starts the answer timer.
+
+Manual buzzes get a 10 second answer timer. Randomly selected students get 15 seconds. The active student's buzzer screen changes color near the end of the timer: yellow for the final two seconds and red once time expires.
 
 If the answer is correct, the team gains the clue value, the clue is marked complete, and the last buzzed team chooses the next clue.
 
-If the answer is wrong, the team loses the clue value and the clue remains open for a steal. The team that answered wrong is locked out of that steal. Students from other teams may buzz. A correct steal earns the clue value. A wrong steal loses no points; the teacher can then press **Continue** to move on.
+If the answer is wrong, the team loses the clue value and the clue remains open for one steal. The team that answered wrong is locked out of that steal. Students from other teams may buzz. A correct steal earns the clue value. A wrong steal loses no points; the teacher can then press **Continue** to move on.
 
 Student rotation is tracked per team so the same student cannot repeatedly answer for their team before teammates have had a turn. Steal attempts do not count toward that rotation.
+
+The correct answer is shown after **Correct** or **Continue** and stays visible on the presentation board until the next clue is selected.
 
 ## Daily Double
 
@@ -104,19 +138,22 @@ One clue is randomly selected as the Daily Double. When it is chosen, normal buz
 
 The Daily Double leader is the student who buzzed in last, since that student chose the next tile. That leader locks the team's wager from their student screen, then receives the Daily Double prompt and submits the team's answer before the timer expires. The teacher reviews the submitted answer in the Current clue panel and scores it with **Correct** or **Wrong**.
 
-The teacher can still enter a wager and press **Lock wager** from the console if a manual override is needed. Daily Double scoring uses the wager amount instead of the clue value.
+Daily Double wagers follow the same limit as Final Jeopardy: a team may wager up to its current score, or up to `$500` if the team has less than `$500`. The student screen tells the leader when the team is below `$500`.
+
+The teacher can still enter a wager and press **Lock wager** from the console if a manual override is needed. Daily Double scoring uses the locked wager amount instead of the clue value.
 
 ## Final Jeopardy
 
 When all board clues are complete, the game moves into Final Jeopardy.
 
 - Before wagers are locked, the final category, prompt, and answer stay hidden.
-- **Start Final / Reveal Prompt** starts the wager phase, then reveals the final prompt when wagers are ready.
-- Student team leaders enter wagers and final answers from their devices.
-- **Override Wagers** lets the teacher manually adjust final wagers if needed.
-- The teacher marks each team correct or incorrect.
-- **Calculate Final Scores** computes the final totals.
+- Student team leaders enter wagers from their devices. A team may wager up to its current score, or up to `$500` if the team has less than `$500`.
+- Once wagers are locked, the final category and prompt are revealed.
+- Team leaders submit final answers from their devices.
+- The teacher reviews each submission and marks each team correct or incorrect.
+- **Calculate Final Scores** computes the final totals after all wagers and answers are ready for review.
 - **Reveal Next Place** steps through the final results on the presentation board.
+- **Reset Final Jeopardy** restarts the Final Jeopardy wager phase after a confirmation popup.
 
 If students do not submit before timers expire, the app advances with default wager or blank answer behavior.
 
@@ -124,4 +161,4 @@ If students do not submit before timers expire, the app advances with default wa
 
 Open the **Presentation** link from the teacher console on a projector or shared display. It is tied to the current room code, so each teacher's game can have its own presentation board.
 
-The presentation board shows the scoreboard, categories, clue values, active questions, answer reveals, and Final Jeopardy results. It is display-only; all game control happens from the teacher console.
+The presentation board shows the scoreboard, categories, clue values, active questions, question images, answer reveals, buzz winners, emoji reactions, auto-random countdowns, and Final Jeopardy results. It is display-only; all game control happens from the teacher console.
