@@ -946,6 +946,10 @@ $("next-final-reveal").addEventListener("click", () => {
     .catch((error) => window.alert(error.message));
 });
 
+$("return-top").addEventListener("click", () => {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
 renderTeamNameFields();
 loadGameConfigs();
 

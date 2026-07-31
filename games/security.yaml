@@ -1,0 +1,144 @@
+# Optional clue images can be added with:
+# image: folder_name/image_file.png
+
+title: Security Jeopardy
+teams:
+  - Red Team
+  - Blue Team
+
+categories:
+  - name: A VERY APT ADVERSARY
+    clues:
+      - value: 100
+        prompt: This type of adversary relies on prebuilt tools and scripts to conduct attacks, often without a deep understanding of the underlying technology or systems.
+        answer: What is a script kiddie?
+      - value: 200
+        prompt: This framework is used to identify and categorize the tactics and techniques used by adversaries.
+        answer: What is MITRE ATT&CK?
+      - value: 300
+        prompt: This phase of the cyber kill chain involves sending malicious content to the target, such as phishing emails or infected USB drives.
+        answer: What is Delivery?
+      - value: 400
+        prompt: In an effort to spot intruders during lateral movement, a company sets up a system that looks like a real server but is actually a decoy. What is this system called?
+        answer: What is a honeypot?
+      - value: 500
+        prompt: In the risk management process, after assesing threats and determining their likelihood and impact, an organization moves to this step to create tailored strategies to mitigate the risk.
+        answer: What is develop countermeasures?
+
+  - name: VARIABLY VERTICAL VECTORS
+    clues:
+      - value: 100
+        prompt: Due to improper input validation, this type of attack allows an adversary to manipulate a web application's database queries by inserting malicious code specifically designed to retrieve, modify, or delete data.
+        answer: What is SQL injection?
+      - value: 200
+        prompt: These pieces of data are stored in a web browser and can be used to maintain session state, track user activity, and store user preferences, but if not properly secured, they can be exploited by attackers to impersonate users or steal sensitive information.
+        answer: What are cookies?
+      - value: 300
+        prompt: This type of attack involves an adversary exploiting a victim's browser and tricking it into making unintended actions on a web application where the victim is authenticated, often leading to unauthorized actions or data exposure.
+        answer: What is Cross-Site Request Forgery (CSRF)?
+      - value: 400
+        prompt: This web vulnerability occurs when an attacker embeds a malicious script into a URL, which when clicked by a user, will be sent out and then returned by the web application, allowing the attacker to execute scripts in the context of the victim's browser.
+        answer: What is Reflected Cross-Site Scripting (XSS)?
+      - value: 500
+        prompt: This type of brute force attack involves using a small set of common passwords across many usernames on the same site to avoid lockouts.
+        answer: What is password spraying?
+
+  - name: BLOCK IT LIKE IT'S HOT
+    clues:
+      - value: 100
+        prompt: This tool analyzes firewall filtering behavior by manipulating TTL values and observing the responses from the target.
+        answer: What is Firewalk?
+      - value: 200
+        prompt: This method of VLAN hopping is performed when an adversary's rogue switch pretends to be a legitimate switch, using DTP packets to negotiate trunk links and access VLAN traffic.
+        answer: What is switch spoofing?
+      - value: 300
+        prompt: In a chassis-based network device, this component is responsible for providing high-speed connectivity between line cards and control modules.
+        answer: What is the backplane?
+      - value: 400
+        prompt: This reconaissance tool uses multiple GETNEXT requests to gather SNMP data for discovering router configurations and other network information when port 161 is open.
+        answer: What is SNMPwalk?
+      - value: 500
+        prompt: This type of non-volatile memory is often used to store firmware, keys, and authentication data; ensuring persistence even when the device is powered off.
+        answer: What is EEPROM (Electrically Erasable Programmable Read-Only Memory)?
+
+  - name: PATCH ME IF YOU CAN
+    clues:
+      - value: 100
+        prompt: This method of IDS evasion involves separating malicious packets into smaller pieces, making it difficult for the IDS to reassemble and detect the attack.
+        answer: What is fragmentation?
+      - value: 200
+        prompt: On Windows, security patches and updates designed to address specific issues are commonly known by this term.
+        answer: What is a hotfix?
+      - value: 300
+        prompt: This native security product on Windows systems provides real-time protection against malware, spyware, and other potentially unwanted software.
+        answer: What is Windows Defender?
+      - value: 400
+        prompt: This web vulneravility involves an attacker storing malicious script in something like a help desk ticket in the hopes that an administrator will view the ticket and unknowingly execute the script, allowing the attacker to gain access to sensitive information or perform unauthorized actions.
+        answer: What is Blind Cross-Site Scripting (XSS)?
+      - value: 500
+        prompt: On Linux, this command is used to display the current running kernel version.
+        answer: What is "uname -r"?
+
+  - name: RIP UNCLE PEN
+    clues:
+      - value: 100
+        prompt: This powerful penetration testing tool can automatically exploit known vulnerabilities in a target system, allowing testers to quickly identify and validate security weaknesses.
+        answer: What is Metasploit?
+      - value: 200
+        prompt: This type of penetration test, the tester is provided full knowledge of the target environment, including network diagrams, source code, and credentials.
+        answer: What is a white box penetration test?
+      - value: 300
+        prompt: This phase of penetration testing often involves tools like Mimikatz to extract credentials from memory, allowing the tester to escalate privileges, extract sensitive information, and move laterally within the target environment.
+        answer: What is post-exploitation?
+      - value: 400
+        prompt: This documentation outlines the scope, legal boundaries, and authorized activities for a penetration test, ensuring that the tester operates within the agreed-upon parameters.
+        answer: What are the Rules of Engagement (RoE)?
+      - value: 500
+        prompt: According to responsible disclosure practices, this is the next step an ethical hacker should take after discovering a vulnerability in a software application, hardware device, or online service.
+        answer: What is notify the organization through authorized channels?
+
+  - name: Nes-SUS
+    clues:
+      - value: 100
+        prompt: This image represents the dashboard of this widely used vulnerability scanning tool.
+        image: security/nessusdashboard.jpg
+        answer: What is Nessus?
+      - value: 200
+        prompt: This number identifies specific vulnerabilities to allow cybersecurity professionals to discover information about the vulnerability, including its severity, impact, and potential mitigations.
+        answer: What is a CVE (Common Vulnerabilities and Exposures) ID?
+      - value: 300
+        prompt: This scoring system is used to assess the severity of vulnerabilities, providing a numerical score that helps organizations prioritize their response and remediation efforts.
+        answer: What is CVSS (Common Vulnerability Scoring System)?
+      - value: 400
+        prompt: In a Nessus scan report, this identifier corresponds to a specific detection script used to identify a vulnerability, misconfiguration, or security issue on a target system.
+        answer: What is a plugin ID?
+      - value: 500
+        prompt: This NIST managed repository provides a comprehensive list of known vulnerabilities, along with their associated CVE IDs, descriptions, and references to help organizations stay informed about potential security risks.
+        answer: What is the National Vulnerability Database (NVD)?
+
+  - name: CYBER ESCALATOR
+    clues:
+      - value: 100
+        prompt: This type of event log would typically include events suchs as blocked connections, protocol violations, and/or dropped packets.
+        answer: What is a network log?
+      - value: 200
+        prompt: This type of privilege escalation occurs when an attacker exploits a vulnerability in the operating system or application to gain higher-level permissions than they are authorized for.
+        answer: What is vertical privilege escalation?
+      - value: 300
+        prompt: This time-based scheduler is used to automate tasks on Linux and Unix-like systems, allowing users to schedule scripts or commands to run at specific intervals or times.
+        answer: What is cron?
+      - value: 400
+        prompt: This Linux command could be used by an attacker to create a new account, potentially allowing them to maintain access to the system even after their initial compromise.
+        answer: What is the 'useradd' command?
+      - value: 500
+        prompt: This exploit involves taking advantage of a new, often legitimate, process in its suspended state by replacing the orginal memory with malicious code before it resumes execution.
+        answer: What is process hollowing?
+
+daily_double:
+  prompt: List the seven steps of the cyber kill chain, in order. (No notes or outside resources allowed.)
+  answer: 1. Reconnaissance 2. Weaponization 3. Delivery 4. Exploitation 5. Installation 6. Command and Control 7. Actions on Objectives
+
+final:
+  category: "Oh, a Hornet Squeezing Oranges?!"
+  prompt: Go to the Multijuicer server at 10.50.132.117:8080 and create a NEW account for your team. As a group, and without using any outside resources, succesfully solve the "Reflected XSS" challenge. Once complete, have your instructor verify your solution who will then enter the flag.
+  answer: Instructor_FLAG

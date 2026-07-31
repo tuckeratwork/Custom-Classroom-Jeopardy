@@ -1,0 +1,109 @@
+# Blank Jeopardy template.
+# Copy this file and fill in every blank category name, prompt, and answer before starting a game.
+# Optional clue images can be added with:
+# image: folder_name/image_file.png
+
+title: Blank Jeopardy Template
+teams:
+  - Red Team
+  - Blue Team
+
+categories:
+  - name: ""
+    clues:
+      - value: 100
+        prompt: ""
+        answer: ""
+      - value: 200
+        prompt: ""
+        answer: ""
+      - value: 300
+        prompt: ""
+        answer: ""
+      - value: 400
+        prompt: ""
+        answer: ""
+      - value: 500
+        prompt: ""
+        answer: ""
+
+  - name: ""
+    clues:
+      - value: 100
+        prompt: ""
+        answer: ""
+      - value: 200
+        prompt: ""
+        answer: ""
+      - value: 300
+        prompt: ""
+        answer: ""
+      - value: 400
+        prompt: ""
+        answer: ""
+      - value: 500
+        prompt: ""
+        answer: ""
+
+  - name: ""
+    clues:
+      - value: 100
+        prompt: ""
+        answer: ""
+      - value: 200
+        prompt: ""
+        answer: ""
+      - value: 300
+        prompt: ""
+        answer: ""
+      - value: 400
+        prompt: ""
+        answer: ""
+      - value: 500
+        prompt: ""
+        answer: ""
+
+  - name: ""
+    clues:
+      - value: 100
+        prompt: ""
+        answer: ""
+      - value: 200
+        prompt: ""
+        answer: ""
+      - value: 300
+        prompt: ""
+        answer: ""
+      - value: 400
+        prompt: ""
+        answer: ""
+      - value: 500
+        prompt: ""
+        answer: ""
+
+  - name: ""
+    clues:
+      - value: 100
+        prompt: ""
+        answer: ""
+      - value: 200
+        prompt: ""
+        answer: ""
+      - value: 300
+        prompt: ""
+        answer: ""
+      - value: 400
+        prompt: ""
+        answer: ""
+      - value: 500
+        prompt: ""
+        answer: ""
+
+daily_double:
+  prompt: ""
+  answer: ""
+
+final:
+  category: ""
+  prompt: ""
+  answer: ""
