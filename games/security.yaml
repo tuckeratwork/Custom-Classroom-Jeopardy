@@ -73,7 +73,7 @@ categories:
         prompt: This native security product on Windows systems provides real-time protection against malware, spyware, and other potentially unwanted software.
         answer: What is Windows Defender?
       - value: 400
-        prompt: This web vulneravility involves an attacker storing malicious script in something like a help desk ticket in the hopes that an administrator will view the ticket and unknowingly execute the script, allowing the attacker to gain access to sensitive information or perform unauthorized actions.
+        prompt: This web vulnerability involves an attacker storing malicious script in something like a help desk ticket in the hopes that an administrator will view the ticket and unknowingly execute the script, allowing the attacker to gain access to sensitive information or perform unauthorized actions.
         answer: What is Blind Cross-Site Scripting (XSS)?
       - value: 500
         prompt: On Linux, this command is used to display the current running kernel version.
