@@ -10,6 +10,15 @@ let confettiSignature = null;
 let autoRandomAdvanceInFlight = false;
 let lastZoomClueId = null;
 
+const BOARD_ZOOM_MIN = 70;
+const BOARD_ZOOM_MAX = 140;
+const BOARD_ZOOM_STEP = 10;
+const BOARD_ZOOM_STORAGE_KEY = "jeopardy-presentation-size";
+let boardZoom = Number.parseInt(window.localStorage.getItem(BOARD_ZOOM_STORAGE_KEY), 10);
+if (!Number.isFinite(boardZoom) || boardZoom < BOARD_ZOOM_MIN || boardZoom > BOARD_ZOOM_MAX) {
+  boardZoom = 100;
+}
+
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
 const audioUrl = (path) => `${path}?${audioCacheBust}`;
@@ -44,6 +53,19 @@ function imageUrl(path) {
 function questionImageMarkup(clue) {
   const image = imageUrl(clue?.image);
   return image ? `<img class="question-image presentation-question-image" src="${escapeHtml(image)}" alt="">` : "";
+}
+
+function applyBoardZoom() {
+  document.documentElement.style.setProperty("--presentation-scale", String(boardZoom / 100));
+  $("board-zoom-value").textContent = `${boardZoom}%`;
+  $("board-zoom-out").disabled = boardZoom <= BOARD_ZOOM_MIN;
+  $("board-zoom-in").disabled = boardZoom >= BOARD_ZOOM_MAX;
+  window.localStorage.setItem(BOARD_ZOOM_STORAGE_KEY, String(boardZoom));
+}
+
+function changeBoardZoom(delta) {
+  boardZoom = Math.min(BOARD_ZOOM_MAX, Math.max(BOARD_ZOOM_MIN, boardZoom + delta));
+  applyBoardZoom();
 }
 
 function spawnReaction(emoji, side) {
@@ -244,7 +266,7 @@ function animateTileZoom(tile) {
 function renderGameBoard() {
   const board = $("presentation-board");
   const columns = state.categories.length;
-  board.style.gridTemplateColumns = `repeat(${columns}, minmax(110px, 1fr))`;
+  board.style.gridTemplateColumns = `repeat(${columns}, minmax(calc(110px * var(--presentation-scale)), 1fr))`;
   board.innerHTML = "";
 
   state.categories.forEach((category) => {
@@ -295,6 +317,7 @@ function renderClue() {
     lastZoomClueId = null;
     const completedClue = findClueById(state.last_completed_clue_id);
     if (completedClue?.answer) {
+      board.classList.add("presentation-clue-card-open");
       board.innerHTML = `
         <p class="eyebrow">${completedClue.is_daily_double ? "Daily Double" : `$${completedClue.value}`}</p>
         <h2>${escapeHtml(completedClue.prompt || "")}</h2>
@@ -303,7 +326,7 @@ function renderClue() {
       `;
       return;
     }
-    board.classList.remove("presentation-clue-card-open");
+    board.classList.add("presentation-clue-card-open");
     board.textContent = "Waiting for the teacher.";
     lastPresentedClueId = null;
     return;
@@ -523,4 +546,13 @@ window.setInterval(() => {
   renderClue();
   advanceAutoRandomIfExpired();
 }, 250);
+
+$("board-zoom-out").addEventListener("click", () => changeBoardZoom(-BOARD_ZOOM_STEP));
+$("board-zoom-reset").addEventListener("click", () => {
+  boardZoom = 100;
+  applyBoardZoom();
+});
+$("board-zoom-in").addEventListener("click", () => changeBoardZoom(BOARD_ZOOM_STEP));
+
+applyBoardZoom();
 fetchLatest();

@@ -161,4 +161,4 @@ If students do not submit before timers expire, the app advances with default wa
 
 Open the **Presentation** link from the teacher console on a projector or shared display. It is tied to the current room code, so each teacher's game can have its own presentation board.
 
-The presentation board shows the scoreboard, categories, clue values, active questions, question images, answer reveals, buzz winners, emoji reactions, auto-random countdowns, and Final Jeopardy results. It is display-only; all game control happens from the teacher console.
+The presentation board shows the scoreboard, categories, clue values, active questions, question images, answer reveals, buzz winners, emoji reactions, auto-random countdowns, and Final Jeopardy results. The team scores and previous-answer panel sit below the full-width clue board. Use the **-**, percentage, and **+** controls beside the scoreboard to decrease, reset, or increase the presentation size without changing the teacher console. The selected size is remembered by that presentation browser. The board is otherwise display-only; all game control happens from the teacher console.

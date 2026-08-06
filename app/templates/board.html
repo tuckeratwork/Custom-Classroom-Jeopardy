@@ -4,20 +4,31 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jeopardy Presentation Board</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260626-ddwagerfix1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260804-boardzoom1">
   </head>
   <body data-role="board">
     <div id="reaction-stream-left" class="reaction-stream reaction-stream-left" aria-hidden="true"></div>
     <div id="reaction-stream-right" class="reaction-stream reaction-stream-right" aria-hidden="true"></div>
     <main class="presentation-shell">
-      <section class="presentation-scoreboard">
-        <p class="eyebrow">Scoreboard</p>
-        <h1 id="board-title">Classroom Jeopardy</h1>
-        <div id="board-scores" class="presentation-scores"></div>
-      </section>
-
       <section class="presentation-clue">
         <div id="presentation-board" class="presentation-board"></div>
+      </section>
+
+      <section class="presentation-footer">
+        <div class="presentation-scoreboard">
+          <div class="presentation-scoreboard-header">
+            <div>
+              <p class="eyebrow">Scoreboard</p>
+              <h1 id="board-title">Classroom Jeopardy</h1>
+            </div>
+            <div class="presentation-zoom-controls" role="group" aria-label="Presentation size">
+              <button id="board-zoom-out" type="button" title="Decrease presentation size" aria-label="Decrease presentation size">&minus;</button>
+              <button id="board-zoom-reset" type="button" title="Reset presentation size" aria-label="Reset presentation size"><span id="board-zoom-value">100%</span></button>
+              <button id="board-zoom-in" type="button" title="Increase presentation size" aria-label="Increase presentation size">+</button>
+            </div>
+          </div>
+          <div id="board-scores" class="presentation-scores"></div>
+        </div>
         <div id="board-clue" class="presentation-clue-card">Waiting for the teacher.</div>
       </section>
 
@@ -27,6 +38,6 @@
       </section>
     </main>
 
-    <script src="/static/board.js?v=20260626-ddwagerfix1"></script>
+    <script src="/static/board.js?v=20260804-boardzoom1"></script>
   </body>
 </html>

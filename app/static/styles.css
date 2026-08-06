@@ -10,6 +10,7 @@
   --accent-2: #32d583;
   --danger: #ff6b6b;
   --blue: #2457c5;
+  --presentation-scale: 1;
 }
 
 * {
@@ -747,9 +748,10 @@ body[data-role="board"] .reaction-stream-right {
 .presentation-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 24px;
-  padding: 24px;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: calc(18px * var(--presentation-scale));
+  padding: calc(18px * var(--presentation-scale));
 }
 
 body[data-role="board"].presentation-question-active .presentation-shell {
@@ -769,10 +771,15 @@ body[data-role="board"].presentation-question-active .presentation-clue {
 }
 
 body[data-role="board"].presentation-question-active .presentation-clue-card {
+  display: grid;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   min-height: 100vh;
+  overflow: auto;
   border: 0;
   border-radius: 0;
-  padding: clamp(28px, 5vw, 76px);
+  padding: clamp(28px, calc(5vw * var(--presentation-scale)), 76px);
 }
 
 .presentation-scoreboard,
@@ -784,13 +791,56 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
   padding: 22px;
 }
 
+.presentation-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  gap: calc(18px * var(--presentation-scale));
+  align-items: stretch;
+}
+
+.presentation-scoreboard {
+  padding: calc(14px * var(--presentation-scale));
+}
+
+.presentation-scoreboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: calc(10px * var(--presentation-scale));
+}
+
 .presentation-scoreboard h1 {
-  margin: 4px 0 18px;
+  margin: 2px 0 0;
+  font-size: calc(22px * var(--presentation-scale));
+}
+
+.presentation-zoom-controls {
+  display: grid;
+  grid-template-columns: 40px 68px 40px;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.presentation-zoom-controls button {
+  min-height: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #334155;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.presentation-zoom-controls #board-zoom-reset {
+  font-size: 14px;
 }
 
 .presentation-scores {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(calc(145px * var(--presentation-scale)), 1fr));
+  gap: calc(8px * var(--presentation-scale));
 }
 
 .presentation-score-row,
@@ -798,24 +848,30 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
   display: grid;
   grid-template-columns: 40px 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: calc(8px * var(--presentation-scale));
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: calc(8px * var(--presentation-scale));
   background: #101822;
 }
 
 .presentation-score-row span {
   color: var(--accent);
-  font-size: 24px;
+  font-size: calc(18px * var(--presentation-scale));
   font-weight: 900;
+}
+
+.presentation-score-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: calc(15px * var(--presentation-scale));
 }
 
 .presentation-score-row em,
 .winner-row strong {
   color: var(--accent-2);
   font-style: normal;
-  font-size: 28px;
+  font-size: calc(20px * var(--presentation-scale));
   font-weight: 900;
 }
 
@@ -825,18 +881,17 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 }
 
 .presentation-clue {
-  display: grid;
-  gap: 20px;
+  min-width: 0;
 }
 
 .presentation-board {
   display: grid;
-  gap: 8px;
+  gap: calc(8px * var(--presentation-scale));
 }
 
 .presentation-category,
 .presentation-tile {
-  min-height: 64px;
+  min-height: calc(64px * var(--presentation-scale));
   border-radius: 6px;
   display: grid;
   place-items: center;
@@ -844,8 +899,9 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 }
 
 .presentation-category {
-  padding: 8px;
+  padding: calc(8px * var(--presentation-scale));
   background: #1b2f63;
+  font-size: calc(16px * var(--presentation-scale));
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -853,7 +909,7 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 .presentation-tile {
   background: var(--blue);
   color: var(--accent);
-  font-size: 28px;
+  font-size: calc(28px * var(--presentation-scale));
   font-weight: 900;
   transition: opacity 220ms ease, background 220ms ease, box-shadow 220ms ease;
 }
@@ -888,10 +944,11 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 }
 
 .presentation-clue-card {
-  min-height: 360px;
+  min-height: calc(150px * var(--presentation-scale));
   display: grid;
   align-content: center;
-  gap: 18px;
+  gap: calc(12px * var(--presentation-scale));
+  padding: calc(16px * var(--presentation-scale));
   text-align: center;
   opacity: 0;
   transform: translateY(16px) scale(0.96) rotateX(-8deg);
@@ -905,7 +962,7 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 
 .presentation-clue-card h2 {
   margin: 0;
-  font-size: 42px;
+  font-size: calc(24px * var(--presentation-scale));
 }
 
 .presentation-question-image {
@@ -915,6 +972,10 @@ body[data-role="board"].presentation-question-active .presentation-clue-card {
 
 body[data-role="board"].presentation-question-active .presentation-question-image {
   max-height: min(46vh, 520px);
+}
+
+body[data-role="board"].presentation-question-active .presentation-clue-card h2 {
+  font-size: calc(42px * var(--presentation-scale));
 }
 
 .presentation-buzz-winner {
@@ -944,10 +1005,15 @@ body[data-role="board"].presentation-question-active .presentation-question-imag
 
 .presentation-answer {
   border-top: 1px solid var(--line);
-  padding-top: 18px;
+  padding-top: calc(12px * var(--presentation-scale));
   color: var(--accent-2);
-  font-size: 30px;
+  font-size: calc(22px * var(--presentation-scale));
   font-weight: 900;
+}
+
+body[data-role="board"].presentation-question-active .presentation-answer {
+  padding-top: calc(18px * var(--presentation-scale));
+  font-size: calc(30px * var(--presentation-scale));
 }
 
 .presentation-auto-random {
@@ -1053,6 +1119,10 @@ body[data-role="board"].presentation-question-active .presentation-question-imag
   }
 
   .presentation-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .presentation-footer {
     grid-template-columns: 1fr;
   }
 
