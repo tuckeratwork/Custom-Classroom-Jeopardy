@@ -230,10 +230,26 @@ body[data-role="teacher"] .control-panel {
 
 .student-roster-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(110px, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 4px 0;
+}
+
+.student-roster-row > span {
+  grid-column: 1 / -1;
+  font-weight: 800;
+}
+
+.student-roster-row select,
+.student-roster-row button {
+  min-height: 34px;
+  height: 34px;
+}
+
+.student-roster-row button {
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .board {
@@ -476,6 +492,46 @@ body[data-role="teacher"] .score-row {
   animation: timer-expired-pulse 0.8s ease-in-out infinite alternate;
 }
 
+.buzzer-opening {
+  margin: 14px 0 10px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(242, 201, 76, 0.1);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.buzzer-opening strong {
+  display: inline-block;
+  min-width: 24px;
+  font-size: 28px;
+}
+
+.remaining-teammates {
+  margin: 10px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #101822;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.remaining-teammates strong {
+  color: var(--accent-2);
+}
+
+.save-status {
+  min-height: 20px;
+  margin: 8px 0 0;
+  color: var(--accent-2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 @keyframes timer-expired-pulse {
   from {
     transform: scale(1);
@@ -628,6 +684,10 @@ body[data-role="teacher"] .score-row {
 .student-status-active {
   color: var(--accent-2);
   font-size: 24px;
+}
+
+.student-status-penalty {
+  color: var(--danger);
 }
 
 .question-image {

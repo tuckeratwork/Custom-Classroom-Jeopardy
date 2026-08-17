@@ -13,6 +13,7 @@ from app.game import (
     join_team,
     load_game_config,
     lock_daily_double_wager,
+    move_student,
     remove_student,
     random_buzz_eligible,
     reset_final,
@@ -23,6 +24,8 @@ from app.game import (
     score_final,
     select_clue,
     set_auto_random,
+    set_early_buzz_penalty,
+    set_global_rotation,
     set_reactions,
     set_team_scores,
     set_final_wagers,
@@ -375,6 +378,169 @@ def test_teacher_can_clear_rotation_and_randomly_buzz_remaining_student(monkeypa
 
     reset_buzzer_rotation(state)
     assert next(team for team in state.teams if team.name == "Red Team").answered_students == []
+
+
+def test_teacher_can_move_student_without_losing_buzzer_history() -> None:
+    state = make_state("MOVE1")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Red Team", "Ari")
+    join_team(state, "Blue Team", "Ben")
+    red = next(team for team in state.teams if team.name == "Red Team")
+    red.correct_counts["Alice"] = 3
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice")
+
+    move_student(state, "Red Team", "Blue Team", "Alice")
+
+    blue = next(team for team in state.teams if team.name == "Blue Team")
+    assert "Alice" not in red.students
+    assert "Alice" in blue.students
+    assert blue.correct_counts["Alice"] == 3
+    assert state.buzz_winner == "Blue Team"
+    assert state.last_buzz_team == "Blue Team"
+    score_current_clue(state, correct=True)
+    assert blue.score == clue.value
+
+
+def test_student_move_is_blocked_during_daily_double_and_final() -> None:
+    state = make_state("MOVE2")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    daily_double = next(
+        clue for category in state.categories for clue in category.clues if clue.is_daily_double
+    )
+    select_clue(state, daily_double.id, selecting_team="Red Team")
+    with pytest.raises(GameError):
+        move_student(state, "Red Team", "Blue Team", "Alice")
+
+    state = make_state("MOVE3")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    reveal_final(state)
+    with pytest.raises(GameError):
+        move_student(state, "Red Team", "Blue Team", "Alice")
+
+
+def test_early_buzz_penalty_locks_student_until_steal(monkeypatch) -> None:
+    state = make_state("EARLY1")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Red Team", "Ari")
+    join_team(state, "Blue Team", "Ben")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    now = [1000]
+    monkeypatch.setattr("app.game.time.time", lambda: now[0])
+    set_auto_random(state, True)
+    set_early_buzz_penalty(state, True)
+    select_clue(state, clue.id)
+
+    assert state.buzz_open_at == 1005
+    assert state.auto_random_expires_at == 1015
+    buzz(state, "Blue Team", "Ben")
+    assert state.buzz_winner is None
+    assert state.early_buzz_lockouts == {"Blue Team": ["Ben"]}
+    assert next(team for team in state.teams if team.name == "Blue Team").answered_students == []
+
+    now[0] = 1006
+    with pytest.raises(GameError, match="Early buzz penalty"):
+        buzz(state, "Blue Team", "Ben")
+    buzz(state, "Red Team", "Alice")
+    score_current_clue(state, correct=False)
+    buzz(state, "Blue Team", "Ben")
+    assert state.buzz_winner_student == "Ben"
+
+
+def test_early_buzz_selects_student_who_was_already_final_eligible(monkeypatch) -> None:
+    state = make_state("EARLY2")
+    join_team(state, "Red Team", "Alice")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    monkeypatch.setattr("app.game.time.time", lambda: 1000)
+    set_early_buzz_penalty(state, True)
+    select_clue(state, clue.id)
+
+    buzz(state, "Red Team", "Alice")
+
+    assert state.buzz_winner == "Red Team"
+    assert state.buzz_winner_student == "Alice"
+    assert state.buzz_selection_reason == "final_eligible"
+    assert state.buzz_expires_at == 1020
+    assert state.early_buzz_lockouts == {}
+    assert state.final_eligible_trigger_student is None
+
+
+def test_early_penalty_immediately_selects_new_final_eligible_student(monkeypatch) -> None:
+    state = make_state("EARLY3")
+    join_team(state, "Red Team", "Alice")
+    join_team(state, "Blue Team", "Ben")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    monkeypatch.setattr("app.game.time.time", lambda: 1000)
+    set_early_buzz_penalty(state, True)
+    select_clue(state, clue.id)
+
+    buzz(state, "Red Team", "Alice")
+
+    assert state.early_buzz_lockouts == {"Red Team": ["Alice"]}
+    assert state.buzz_winner == "Blue Team"
+    assert state.buzz_winner_student == "Ben"
+    assert state.buzz_selection_reason == "final_eligible"
+    assert state.buzz_expires_at == 1020
+    assert state.final_eligible_trigger_team == "Red Team"
+    assert state.final_eligible_trigger_student == "Alice"
+    payload = public_state(state)
+    assert payload["final_eligible_trigger_team"] == "Red Team"
+    assert payload["final_eligible_trigger_student"] == "Alice"
+
+
+def test_global_rotation_waits_for_every_connected_student() -> None:
+    state = make_state("GLOBAL1")
+    for team_name, students in {"Red Team": ["Alice", "Ari"], "Blue Team": ["Ben", "Bea"]}.items():
+        for student in students:
+            join_team(state, team_name, student)
+    clues = [
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    ]
+    set_global_rotation(state, True)
+
+    for index, (team_name, student) in enumerate(
+        [("Red Team", "Alice"), ("Red Team", "Ari"), ("Blue Team", "Ben")]
+    ):
+        select_clue(state, clues[index].id)
+        buzz(state, team_name, student)
+        score_current_clue(state, correct=True)
+
+    select_clue(state, clues[3].id)
+    with pytest.raises(GameError, match="already answered"):
+        buzz(state, "Red Team", "Alice")
+    buzz(state, "Blue Team", "Bea")
+    score_current_clue(state, correct=True)
+    assert all(team.answered_students == [] for team in state.teams)
+
+    select_clue(state, clues[4].id)
+    buzz(state, "Red Team", "Alice")
+    assert state.buzz_winner_student == "Alice"
 
 
 def test_auto_random_starts_on_selected_clue_and_picks_if_no_buzz(monkeypatch) -> None:

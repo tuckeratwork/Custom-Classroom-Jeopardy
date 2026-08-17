@@ -23,6 +23,7 @@ from .game import (
     join_team,
     load_game_config,
     lock_daily_double_wager,
+    move_student,
     public_state,
     random_buzz_eligible,
     remove_student,
@@ -34,6 +35,8 @@ from .game import (
     score_final,
     select_clue,
     set_auto_random,
+    set_early_buzz_penalty,
+    set_global_rotation,
     set_reactions,
     set_team_scores,
     set_final_wagers,
@@ -54,6 +57,7 @@ from .models import (
     FinalWagerRequest,
     FinalWagersRequest,
     JoinRequest,
+    MoveStudentRequest,
     ReactionRequest,
     ReactionsToggleRequest,
     ScoreClueRequest,
@@ -436,6 +440,38 @@ async def auto_random_route(payload: AutoRandomRequest, teacher: str = Depends(c
     return public_state(state, reveal_answers=True)
 
 
+@app.post("/api/buzzer/early-penalty")
+async def early_buzz_penalty_route(
+    payload: AutoRandomRequest,
+    teacher: str = Depends(current_teacher),
+) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: set_early_buzz_penalty(current, payload.enabled),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/buzzer/global-rotation")
+async def global_rotation_route(
+    payload: AutoRandomRequest,
+    teacher: str = Depends(current_teacher),
+) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: set_global_rotation(current, payload.enabled),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    await broadcast_state(state.session_code)
+    return public_state(state, reveal_answers=True)
+
+
 @app.post("/api/buzzer/auto-random/advance")
 async def auto_random_advance_route(payload: SessionRequest, teacher: str = Depends(current_teacher)) -> dict:
     try:
@@ -526,6 +562,38 @@ async def remove_student_route(payload: StudentRequest, teacher: str = Depends(c
             "student_name": payload.student_name,
         },
     )
+    return public_state(state, reveal_answers=True)
+
+
+@app.post("/api/students/move")
+async def move_student_route(
+    payload: MoveStudentRequest,
+    teacher: str = Depends(current_teacher),
+) -> dict:
+    try:
+        state = store.update(
+            payload.session_code,
+            lambda current: move_student(
+                current,
+                payload.from_team_name,
+                payload.to_team_name,
+                payload.student_name,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await manager.broadcast(
+        state.session_code,
+        {
+            "type": "student_moved",
+            "from_team_name": payload.from_team_name,
+            "to_team_name": payload.to_team_name,
+            "student_name": payload.student_name,
+        },
+    )
+    await broadcast_state(state.session_code)
     return public_state(state, reveal_answers=True)
 
 

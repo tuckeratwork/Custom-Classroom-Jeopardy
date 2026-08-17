@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Jeopardy Buzzer</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260626-ddwagerfix1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260817-buzzrules1">
   </head>
   <body data-role="student">
     <main class="student-shell">
@@ -27,12 +27,15 @@
         <p class="eyebrow" id="student-session"></p>
         <label class="audio-toggle student-audio-toggle"><input id="mute-music" type="checkbox"> Mute music</label>
         <h1 id="student-team"></h1>
+        <div id="student-move-notice" class="notice-text hidden" aria-live="polite"></div>
         <div id="responder-banner" class="responder-banner hidden">You are up</div>
         <div id="student-clue" class="student-clue">Waiting for the teacher.</div>
         <div id="daily-double-action" class="final-action hidden"></div>
+        <div id="buzzer-opening" class="buzzer-opening hidden" aria-live="polite"></div>
         <button id="buzz-button" class="buzz-button">BUZZ</button>
         <div id="buzz-timer" class="buzz-timer hidden">10</div>
         <p id="student-status" class="student-status"></p>
+        <div id="remaining-teammates" class="remaining-teammates hidden"></div>
         <div id="reaction-controls" class="reaction-controls hidden"></div>
         <section id="student-final" class="student-final hidden">
           <div id="final-leaderboard" class="final-leaderboard"></div>
@@ -43,6 +46,6 @@
       </section>
     </main>
 
-    <script src="/static/student.js?v=20260626-ddwagerfix1"></script>
+    <script src="/static/student.js?v=20260817-finaleligible3"></script>
   </body>
 </html>

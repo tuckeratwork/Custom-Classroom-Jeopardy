@@ -130,6 +130,60 @@ def test_student_state_hides_answers(tmp_path, monkeypatch) -> None:
     asyncio.run(scenario())
 
 
+def test_manual_score_persists_as_final_wager_limit(tmp_path, monkeypatch) -> None:
+    use_test_store(tmp_path, monkeypatch)
+
+    async def scenario() -> None:
+        transport = ASGITransport(app=main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            state = (
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
+                    auth=AUTH,
+                )
+            ).json()
+            code = state["session_code"]
+            await client.post(
+                "/api/join",
+                json={"session_code": code, "team_name": "Red Team", "student_name": "Alice"},
+            )
+            await client.post(
+                "/api/join",
+                json={"session_code": code, "team_name": "Blue Team", "student_name": "Ben"},
+            )
+
+            score_response = await client.post(
+                "/api/scores",
+                json={"session_code": code, "scores": {"Red Team": 1700, "Blue Team": 400}},
+                auth=AUTH,
+            )
+            assert score_response.status_code == 200
+            assert main.store.get(code).teams[0].score == 1700
+
+            final_state = (
+                await client.post(
+                    "/api/final/reveal",
+                    json={"session_code": code},
+                    auth=AUTH,
+                )
+            ).json()
+            leader = final_state["final"]["leaders"]["Red Team"]
+            wager_response = await client.post(
+                "/api/final/wager",
+                json={
+                    "session_code": code,
+                    "team_name": "Red Team",
+                    "student_name": leader,
+                    "wager": 1700,
+                },
+            )
+            assert wager_response.status_code == 200
+            assert main.store.get(code).final.wagers["Red Team"] == 1700
+
+    asyncio.run(scenario())
+
+
 def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None:
     use_test_store(tmp_path, monkeypatch)
 

@@ -141,9 +141,16 @@ class GameState(BaseModel):
     last_completed_clue_id: Optional[str] = None
     buzz_winner: Optional[str] = None
     buzz_winner_student: Optional[str] = None
+    buzz_selection_reason: Optional[str] = None
+    final_eligible_trigger_team: Optional[str] = None
+    final_eligible_trigger_student: Optional[str] = None
     buzz_expires_at: Optional[float] = None
     auto_random_enabled: bool = False
     auto_random_expires_at: Optional[float] = None
+    early_buzz_penalty_enabled: bool = False
+    buzz_open_at: Optional[float] = None
+    early_buzz_lockouts: Dict[str, List[str]] = Field(default_factory=dict)
+    global_rotation_enabled: bool = False
     reactions_enabled: bool = True
     last_buzz_team: Optional[str] = None
     last_buzz_student: Optional[str] = None
@@ -211,6 +218,13 @@ class ReactionRequest(BaseModel):
 class StudentRequest(BaseModel):
     session_code: str
     team_name: str
+    student_name: str = Field(max_length=80)
+
+
+class MoveStudentRequest(BaseModel):
+    session_code: str
+    from_team_name: str
+    to_team_name: str
     student_name: str = Field(max_length=80)
 
 

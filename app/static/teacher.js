@@ -325,6 +325,7 @@ function renderStudentRoster() {
     return;
   }
   roster.innerHTML = "";
+  const movesLocked = state.phase !== "board" || Boolean(state.daily_double?.active);
   state.teams.forEach((team) => {
     const group = document.createElement("details");
     group.className = "student-roster-team";
@@ -346,7 +347,16 @@ function renderStudentRoster() {
       team.students.forEach((student) => {
         const row = document.createElement("div");
         row.className = "student-roster-row";
-        row.innerHTML = `<span>${escapeHtml(student)}</span><button class="secondary" data-remove-student="${escapeHtml(student)}" data-remove-team="${escapeHtml(team.name)}">Remove</button>`;
+        const destinations = state.teams
+          .filter((candidate) => candidate.name !== team.name)
+          .map((candidate) => `<option value="${escapeHtml(candidate.name)}">${escapeHtml(candidate.name)}</option>`)
+          .join("");
+        row.innerHTML = `
+          <span>${escapeHtml(student)}</span>
+          <select data-move-destination aria-label="Move ${escapeHtml(student)} to another team" ${movesLocked ? "disabled" : ""}>${destinations}</select>
+          <button class="secondary" data-move-student="${escapeHtml(student)}" data-move-from-team="${escapeHtml(team.name)}" ${movesLocked ? "disabled" : ""} title="${movesLocked ? "Students cannot be moved during Daily Double or Final Jeopardy" : "Move student"}">Move</button>
+          <button class="secondary" data-remove-student="${escapeHtml(student)}" data-remove-team="${escapeHtml(team.name)}">Remove</button>
+        `;
         group.appendChild(row);
       });
     }
@@ -367,9 +377,15 @@ function eligibleStudents() {
     if (!students.length) {
       return;
     }
-    const available = state.steal_active || (team.answered_students || []).length >= students.length
+    const available = state.steal_active || (
+      !state.global_rotation_enabled
+      && (team.answered_students || []).length >= students.length
+    )
       ? students
-      : students.filter((student) => !(team.answered_students || []).some((name) => name.toLowerCase() === student.toLowerCase()));
+      : students.filter((student) => (
+        !(team.answered_students || []).some((name) => name.toLowerCase() === student.toLowerCase())
+        && !(state.early_buzz_lockouts?.[team.name] || []).some((name) => name.toLowerCase() === student.toLowerCase())
+      ));
     available.forEach((student) => eligible.push({ team: team.name, student }));
   });
   return eligible;
@@ -401,11 +417,21 @@ function renderRotationStatus() {
 }
 
 async function saveScoreOverrides() {
+  const status = $("score-save-status");
+  status.textContent = "Saving score changes...";
   const scores = {};
   document.querySelectorAll("[data-score-team]").forEach((input) => {
     scores[input.dataset.scoreTeam] = Number(input.value || 0);
   });
-  await api("/api/scores", { session_code: sessionCode(), scores });
+  try {
+    await api("/api/scores", { session_code: sessionCode(), scores });
+    status.textContent = "Score changes saved.";
+  } catch (error) {
+    status.textContent = error.message;
+    status.style.color = "var(--danger)";
+    throw error;
+  }
+  status.style.color = "";
 }
 
 function showScorePopup(event) {
@@ -507,6 +533,8 @@ function renderControls() {
     $("wager").title = "";
   }
   $("auto-random-toggle").checked = Boolean(state.auto_random_enabled);
+  $("early-buzz-toggle").checked = Boolean(state.early_buzz_penalty_enabled);
+  $("global-rotation-toggle").checked = Boolean(state.global_rotation_enabled);
   $("reactions-toggle").checked = Boolean(state.reactions_enabled);
   $("show-eligible-toggle").checked = showEligibleStudents;
   $("reset-buzzer").textContent = "Reset buzzers";
@@ -875,6 +903,20 @@ $("auto-random-toggle").addEventListener("change", (event) => {
   });
 });
 
+$("early-buzz-toggle").addEventListener("change", (event) => {
+  api("/api/buzzer/early-penalty", {
+    session_code: sessionCode(),
+    enabled: event.target.checked,
+  });
+});
+
+$("global-rotation-toggle").addEventListener("change", (event) => {
+  api("/api/buzzer/global-rotation", {
+    session_code: sessionCode(),
+    enabled: event.target.checked,
+  });
+});
+
 $("show-eligible-toggle").addEventListener("change", (event) => {
   showEligibleStudents = event.target.checked;
   localStorage.setItem("jeopardy_show_eligible", String(showEligibleStudents));
@@ -893,10 +935,27 @@ $("continue-clue").addEventListener("click", () => {
 });
 
 $("save-scores").addEventListener("click", () => {
-  saveScoreOverrides();
+  saveScoreOverrides().catch(() => {});
 });
 
 $("student-roster").addEventListener("click", (event) => {
+  const moveButton = event.target.closest("[data-move-student]");
+  if (moveButton) {
+    const row = moveButton.closest(".student-roster-row");
+    const student = moveButton.dataset.moveStudent;
+    const fromTeam = moveButton.dataset.moveFromTeam;
+    const toTeam = row.querySelector("[data-move-destination]").value;
+    if (!toTeam || !window.confirm(`Move ${student} from ${fromTeam} to ${toTeam}?`)) {
+      return;
+    }
+    api("/api/students/move", {
+      session_code: sessionCode(),
+      from_team_name: fromTeam,
+      to_team_name: toTeam,
+      student_name: student,
+    }).catch((error) => window.alert(error.message));
+    return;
+  }
   const button = event.target.closest("[data-remove-student]");
   if (!button) {
     return;

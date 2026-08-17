@@ -14,6 +14,7 @@ let hasSeenScoreState = false;
 let finalAdvanceInFlight = false;
 let finalRevealSignature = null;
 let finalActionKey = null;
+let studentMoveNoticeTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -37,6 +38,14 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizedIdentity(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function sameIdentity(left, right) {
+  return normalizedIdentity(left) === normalizedIdentity(right);
 }
 
 const supportEmojis = ["👏", "🔥", "💪", "🙌", "⭐"];
@@ -237,6 +246,23 @@ function handleStudentRemoved(message) {
   }
 }
 
+function handleStudentMoved(message) {
+  if (
+    message.from_team_name !== teamName
+    || String(message.student_name || "").toLowerCase() !== studentName.toLowerCase()
+  ) {
+    return;
+  }
+  teamName = message.to_team_name;
+  localStorage.setItem("jeopardy_team", teamName);
+  $("student-team").textContent = `${studentName} - ${teamName}`;
+  const notice = $("student-move-notice");
+  notice.textContent = `Your teacher moved you to ${teamName}.`;
+  notice.classList.remove("hidden");
+  window.clearTimeout(studentMoveNoticeTimer);
+  studentMoveNoticeTimer = window.setTimeout(() => notice.classList.add("hidden"), 6000);
+}
+
 function connectSocket() {
   if (socket) {
     socket.close();
@@ -254,6 +280,8 @@ function connectSocket() {
       handleSessionEnded(message.new_session_code);
     } else if (message.type === "student_removed") {
       handleStudentRemoved(message);
+    } else if (message.type === "student_moved") {
+      handleStudentMoved(message);
     } else if (message.type === "emoji_reaction") {
       if (amActiveResponder()) {
         spawnReaction(message.emoji, message.side);
@@ -282,6 +310,11 @@ function myTeam() {
 
 function amActiveResponder() {
   return state?.buzz_winner === teamName && state?.buzz_winner_student === studentName;
+}
+
+function amEarlyBuzzLocked() {
+  return (state?.early_buzz_lockouts?.[teamName] || [])
+    .some((name) => sameIdentity(name, studentName));
 }
 
 async function loadTeamsForCode() {
@@ -329,9 +362,60 @@ function canBuzz(clue) {
   if (state.steal_active) {
     return team.name !== state.steal_lockout_team;
   }
+  if (amEarlyBuzzLocked()) {
+    return false;
+  }
   const answered = team.answered_students || [];
   const students = team.students || [];
-  return answered.length >= students.length || !answered.some((name) => name.toLowerCase() === studentName.toLowerCase());
+  return (
+    (!state.global_rotation_enabled && answered.length >= students.length)
+    || !answered.some((name) => name.toLowerCase() === studentName.toLowerCase())
+  );
+}
+
+function renderOpeningCountdown() {
+  const countdown = $("buzzer-opening");
+  const clue = currentClue();
+  const remaining = state?.buzz_open_at
+    ? Math.max(0, Math.ceil(state.buzz_open_at - Date.now() / 1000))
+    : 0;
+  const visible = Boolean(
+    clue
+    && !clue.is_daily_double
+    && !state.steal_active
+    && !state.buzz_winner
+    && remaining > 0
+  );
+  countdown.classList.toggle("hidden", !visible);
+  if (visible) {
+    countdown.innerHTML = `Buzzers opening in <strong>${remaining}</strong>`;
+  }
+}
+
+function renderRemainingTeammates(clue) {
+  const panel = $("remaining-teammates");
+  panel.classList.add("hidden");
+  panel.innerHTML = "";
+  const team = myTeam();
+  if (!team || !clue || clue.is_daily_double || state.steal_active || state.buzz_winner) {
+    return;
+  }
+  const students = team.students || [];
+  const answered = team.answered_students || [];
+  const lockouts = state.early_buzz_lockouts?.[team.name] || [];
+  const rotationReset = !state.global_rotation_enabled && answered.length >= students.length;
+  const remaining = students.filter((student) => (
+    (rotationReset || !answered.some((name) => name.toLowerCase() === student.toLowerCase()))
+    && !lockouts.some((name) => name.toLowerCase() === student.toLowerCase())
+  ));
+  if (!remaining.length || remaining.length > 3) {
+    return;
+  }
+  const names = remaining.map((name) => (
+    name.toLowerCase() === studentName.toLowerCase() ? "You" : name
+  ));
+  panel.innerHTML = `<strong>Still eligible for your team:</strong> ${names.map(escapeHtml).join(", ")}`;
+  panel.classList.remove("hidden");
 }
 
 function timerRemaining() {
@@ -708,8 +792,23 @@ function render() {
   if (!state) {
     return;
   }
-  const team = myTeam();
-  const stillJoined = team?.students?.some((name) => name.toLowerCase() === studentName.toLowerCase());
+  let team = myTeam();
+  let stillJoined = team?.students?.some((name) => name.toLowerCase() === studentName.toLowerCase());
+  if (teamName && studentName && state.teams?.length && !stillJoined) {
+    const matchingTeams = state.teams.filter((candidate) => (
+      candidate.students?.some((name) => name.toLowerCase() === studentName.toLowerCase())
+    ));
+    if (matchingTeams.length === 1) {
+      const previousTeam = teamName;
+      handleStudentMoved({
+        from_team_name: previousTeam,
+        to_team_name: matchingTeams[0].name,
+        student_name: studentName,
+      });
+      team = matchingTeams[0];
+      stillJoined = true;
+    }
+  }
   if (teamName && studentName && state.teams?.length && !stillJoined) {
     localStorage.removeItem("jeopardy_session");
     localStorage.removeItem("jeopardy_team");
@@ -757,16 +856,34 @@ function render() {
     }
   }
 
-  if (state.buzz_winner === teamName) {
-    $("student-status").textContent = state.buzz_winner_student === studentName
-      ? "You are up. Give your answer."
-      : `${state.buzz_winner_student || "A teammate"} buzzed first.`;
+  const causedFinalEligibleSelection = Boolean(
+    state.buzz_selection_reason === "final_eligible"
+    && state.final_eligible_trigger_team === teamName
+    && sameIdentity(state.final_eligible_trigger_student, studentName)
+  );
+  const penalizedDuringFinalEligibleSelection = Boolean(
+    state.buzz_selection_reason === "final_eligible" && amEarlyBuzzLocked()
+  );
+  if (causedFinalEligibleSelection) {
+    $("student-status").textContent = `Early buzz penalty awarded. Your early buzz left only one eligible student, so ${state.buzz_winner_student || "the final eligible student"} was automatically selected to answer this question.`;
+  } else if (penalizedDuringFinalEligibleSelection) {
+    $("student-status").textContent = `Early buzz penalty awarded. You are locked out of this clue, and ${state.buzz_winner_student || "the final eligible student"} was automatically selected after only one eligible student remained.`;
+  } else if (state.buzz_winner === teamName) {
+    if (state.buzz_winner_student === studentName && state.buzz_selection_reason === "final_eligible") {
+      $("student-status").textContent = "You are the final eligible buzzer for this clue, you have been selected to answer this question.";
+    } else {
+      $("student-status").textContent = state.buzz_winner_student === studentName
+        ? "You are up. Give your answer."
+        : `${state.buzz_winner_student || "A teammate"} buzzed first.`;
+    }
   } else if (state.buzz_winner) {
     $("student-status").textContent = `${state.buzz_winner_student || "A student"} from ${state.buzz_winner} buzzed first.`;
   } else if (clue && state.steal_active && state.steal_lockout_team === teamName) {
     $("student-status").textContent = "Your team is locked out of this steal.";
   } else if (clue && state.steal_active) {
     $("student-status").textContent = "Steal opportunity. Buzz when ready.";
+  } else if (clue && amEarlyBuzzLocked()) {
+    $("student-status").textContent = "Early buzz penalty awarded; you have been locked out from answering this question. Please do not spam the buzzer and allow the 5 second timer to finish.";
   } else if (clue && !clue.is_daily_double && !canBuzz(clue)) {
     $("student-status").textContent = "Wait for the rest of your team to answer.";
   } else if (clue && !clue.is_daily_double) {
@@ -775,6 +892,10 @@ function render() {
     $("student-status").textContent = "";
   }
   $("student-status").classList.toggle("student-status-active", isActiveResponder);
+  $("student-status").classList.toggle(
+    "student-status-penalty",
+    causedFinalEligibleSelection || penalizedDuringFinalEligibleSelection,
+  );
 
   const scores = $("student-scores");
   scores.innerHTML = "";
@@ -792,6 +913,8 @@ function render() {
   renderTimer();
   renderScoreEvent();
   renderDailyDoubleAction(clue);
+  renderOpeningCountdown();
+  renderRemainingTeammates(clue);
   renderReactionControls(clue);
   renderFinalMode();
 }
@@ -800,9 +923,8 @@ async function submitDailyDoubleWager() {
   const input = $("daily-double-wager-input");
   const error = $("daily-double-error");
   const wager = Number(input.value || 0);
-  const maxWager = wagerLimit();
-  if (!Number.isInteger(wager) || wager < 0 || wager > maxWager) {
-    error.textContent = `Enter a whole dollar amount from $0 to $${maxWager}.`;
+  if (!Number.isInteger(wager) || wager < 0) {
+    error.textContent = "Enter a non-negative whole dollar amount.";
     input.focus();
     return;
   }
@@ -857,9 +979,8 @@ async function submitFinalWager() {
   const input = $("final-wager-input");
   const error = $("final-submit-error");
   const wager = Number(input.value || 0);
-  const maxWager = finalWagerLimit();
-  if (!Number.isInteger(wager) || wager < 0 || wager > maxWager) {
-    error.textContent = `Enter a whole dollar amount from $0 to $${maxWager}.`;
+  if (!Number.isInteger(wager) || wager < 0) {
+    error.textContent = "Enter a non-negative whole dollar amount.";
     input.focus();
     return;
   }
@@ -955,11 +1076,14 @@ $("buzz-button").addEventListener("click", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_code: sessionCode, team_name: teamName, student_name: studentName }),
   });
+  const data = await response.json();
   if (!response.ok) {
-    const data = await response.json();
     $("student-status").textContent = data.detail || "Buzz did not register.";
     $("buzz-button").disabled = false;
+    return;
   }
+  state = data;
+  render();
 });
 
 $("change-game").addEventListener("click", () => {
@@ -1016,6 +1140,7 @@ $("mute-music").addEventListener("change", (event) => {
 if (!timerInterval) {
   timerInterval = window.setInterval(() => {
     renderTimer();
+    renderOpeningCountdown();
     if (state?.phase?.startsWith("final")) {
       updateFinalCountdown();
       advanceFinalIfExpired();

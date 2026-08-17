@@ -90,7 +90,7 @@ Daily Double clues are generated from the `daily_double:` section and currently 
 5. Give students the room code and the `/join` URL.
 6. Open **Presentation** on the projector or shared display.
 
-Students enter the room code, select their team from a dropdown, enter their name, and join. If a student accidentally leaves and rejoins with the same name, the roster should keep one copy. If a stale or incorrect student entry appears, remove it from the teacher roster.
+Students enter the room code, select their team from a dropdown, enter their name, and join. If a student accidentally leaves and rejoins with the same name, the roster should keep one copy. If a student joins the wrong team, use the destination selector and **Move** button in the teacher roster. The student's buzzer updates automatically. Students cannot be moved during a Daily Double or Final Jeopardy. If a stale or incorrect student entry appears, use **Remove** to send that student back to the join screen.
 
 ## Teacher Console
 
@@ -101,8 +101,8 @@ The teacher console is the control room for the game.
 - **Teams** controls how many teams are created for this game, from 2 to 10.
 - **Refresh** reloads the current teacher-owned game.
 - **Presentation** opens the projector board for the current room.
-- **Scores** shows each team score. Edit a score field and press **Save score changes** to manually correct totals.
-- **Students** shows joined students grouped by team. Each team group can be collapsed. Use **Remove** to kick stale or incorrect student entries back to the join screen.
+- **Scores** shows each team score. Edit a score field and press **Save score changes** to manually correct totals. A confirmation appears after the backend saves the new totals, and the saved score is used for Daily Double and Final Jeopardy wager limits.
+- **Students** shows joined students grouped by team. Each team group can be collapsed. Use **Move** to correct a student's team or **Remove** to kick a stale or incorrect entry back to the join screen.
 - **Team** under Current clue is used for selecting the next clue owner and for Daily Double setup.
 - **Correct** scores the active clue for the current buzz winner.
 - **Wrong** marks the current buzz winner wrong. On a normal clue, points are deducted and the other teams can immediately buzz for one steal.
@@ -111,6 +111,8 @@ The teacher console is the control room for the game.
 - **Clear student rotation** lets all joined students buzz again if the rotation creates a stalemate.
 - **Random eligible buzz** randomly selects one currently eligible student and buzzes in for them.
 - **Auto-random eligible student after 15 seconds** starts a countdown when a normal clue is selected. If no student buzzes before it reaches zero, the app randomly buzzes one eligible student.
+- **Early buzz penalty with 5-second opening countdown** leaves buzzers clickable while students see **Buzzers opening in...**. A student who buzzes during those five seconds is locked out for that clue without using their normal rotation turn. Early penalties do not apply to steals. When auto-random is also enabled, both timers begin together and auto-random still occurs 15 seconds after clue selection. If only one eligible student remains, that student is selected automatically with a 20-second answer timer instead of allowing early penalties to leave the clue with no possible buzzer. A student whose early buzz triggers this selection receives a separate penalty explanation naming the automatically selected student.
+- **All Participants Required for Buzzer Eligibility Reset** changes the normal rotation so it resets only after every connected student across every team has answered. **Clear student rotation** remains a teacher override and immediately resets everyone.
 - **Show eligible students** toggles the eligible student list. It is off by default to keep the teacher panel less cluttered.
 - **Eligible to buzz** shows which students can currently buzz based on the team rotation and steal lockout rules when that display is enabled.
 - **Emoji reactions** lets students send anonymous encouragement or playful opposition emojis while a normal clue has an active buzz winner. The answering student and presentation board see the emoji streams. Reactions are disabled for Daily Double and Final Jeopardy.
@@ -128,7 +130,7 @@ If the answer is correct, the team gains the clue value, the clue is marked comp
 
 If the answer is wrong, the team loses the clue value and the clue remains open for one steal. The team that answered wrong is locked out of that steal. Students from other teams may buzz. A correct steal earns the clue value. A wrong steal loses no points; the teacher can then press **Continue** to move on.
 
-Student rotation is tracked per team so the same student cannot repeatedly answer for their team before teammates have had a turn. Steal attempts do not count toward that rotation.
+Student rotation is tracked per team by default so the same student cannot repeatedly answer for their team before teammates have had a turn. The optional all-participants setting makes this a single classroom-wide cycle instead. Steal attempts and early buzz penalties do not count toward either rotation. When three or fewer students remain eligible on a team, each student on that team sees their names; students never see another team's remaining list.
 
 The correct answer is shown after **Correct** or **Continue** and stays visible on the presentation board until the next clue is selected.
 
