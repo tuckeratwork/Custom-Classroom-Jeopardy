@@ -156,6 +156,29 @@ def remove_student_count(counts: dict[str, int], student_name: str) -> None:
             counts.pop(name, None)
 
 
+def student_participant_id(team: TeamState, student_name: str) -> Optional[str]:
+    target = student_name.lower()
+    return next(
+        (participant_id for name, participant_id in team.student_ids.items() if name.lower() == target),
+        None,
+    )
+
+
+def remove_student_participant_id(team: TeamState, student_name: str) -> None:
+    target = student_name.lower()
+    for name in list(team.student_ids):
+        if name.lower() == target:
+            team.student_ids.pop(name, None)
+
+
+def participant_membership(state: GameState, participant_id: str) -> Optional[tuple[str, str]]:
+    for team in state.teams:
+        for student_name, stored_id in team.student_ids.items():
+            if stored_id == participant_id and contains_student(team.students, student_name):
+                return team.name, student_name
+    return None
+
+
 def reset_global_rotation_if_complete(state: GameState) -> bool:
     connected = [team for team in state.teams if team.students]
     if not state.global_rotation_enabled or not connected:
@@ -308,14 +331,51 @@ def begin_final_answer_phase(state: GameState) -> GameState:
     return state
 
 
-def join_team(state: GameState, team_name: str, student_name: str = "") -> GameState:
+def join_team(
+    state: GameState,
+    team_name: str,
+    student_name: str = "",
+    participant_id: Optional[str] = None,
+) -> GameState:
     team = find_team(state, team_name)
-    team.joined = True
     student = normalize_student_name(student_name)
-    existing = {name.lower() for name in team.students}
-    if student.lower() not in existing:
+    participant = (participant_id or "").strip() or None
+    membership = participant_membership(state, participant) if participant else None
+    same_membership = bool(
+        membership
+        and membership[0].lower() == team.name.lower()
+        and membership[1].lower() == student.lower()
+    )
+    if membership and not same_membership:
+        previous_team_name, previous_student_name = membership
+        if previous_team_name.lower() != team.name.lower():
+            move_student(state, previous_team_name, team.name, previous_student_name)
+            team = find_team(state, team.name)
+        if previous_student_name.lower() != student.lower():
+            remove_student(state, team.name, previous_student_name)
+    team.joined = True
+    existing_student = next(
+        (name for name in team.students if name.lower() == student.lower()),
+        None,
+    )
+    if existing_student:
+        student = existing_student
+    else:
         team.students.append(student)
     team.correct_counts.setdefault(student, 0)
+    if participant:
+        remove_student_participant_id(team, student)
+        team.student_ids[student] = participant
+    return state
+
+
+def remove_participant(state: GameState, participant_id: str) -> GameState:
+    participant = participant_id.strip()
+    if not participant:
+        return state
+    while membership := participant_membership(state, participant):
+        team_name, student_name = membership
+        remove_student(state, team_name, student_name)
     return state
 
 
@@ -339,14 +399,18 @@ def move_student(
 
     answered = contains_student(source.answered_students, student)
     correct_count = student_count_value(source.correct_counts, student)
+    participant_id = student_participant_id(source, student)
     source.students = remove_student_name(source.students, student)
     source.answered_students = remove_student_name(source.answered_students, student)
     remove_student_count(source.correct_counts, student)
+    remove_student_participant_id(source, student)
     source.joined = bool(source.students)
 
     destination.students.append(student)
     destination.joined = True
     destination.correct_counts[student] = destination.correct_counts.get(student, 0) + correct_count
+    if participant_id:
+        destination.student_ids[student] = participant_id
     if answered and not contains_student(destination.answered_students, student):
         destination.answered_students.append(student)
 
@@ -404,6 +468,7 @@ def remove_student(state: GameState, team_name: str, student_name: str) -> GameS
     for name in list(team.correct_counts):
         if name.lower() == student.lower():
             team.correct_counts.pop(name, None)
+    remove_student_participant_id(team, student)
     team.joined = bool(team.students)
     if team_name in state.early_buzz_lockouts:
         state.early_buzz_lockouts[team_name] = remove_student_name(
@@ -559,7 +624,12 @@ def submit_daily_double_answer(
     return state
 
 
-def buzz(state: GameState, team_name: str, student_name: str = "") -> GameState:
+def buzz(
+    state: GameState,
+    team_name: str,
+    student_name: str = "",
+    participant_id: Optional[str] = None,
+) -> GameState:
     team = find_team(state, team_name)
     student = normalize_student_name(student_name)
     if state.phase != "board":
@@ -572,6 +642,9 @@ def buzz(state: GameState, team_name: str, student_name: str = "") -> GameState:
         raise GameError(f"{team_name} is locked out of this steal")
     if student.lower() not in {name.lower() for name in team.students}:
         raise GameError(f"{student} has not joined {team_name}")
+    stored_participant = student_participant_id(team, student)
+    if participant_id and stored_participant and participant_id != stored_participant:
+        raise GameError("your student session is no longer active in this room")
     if not state.steal_active:
         if state.buzz_open_at and time.time() < state.buzz_open_at:
             eligible_before = eligible_buzzers(state)

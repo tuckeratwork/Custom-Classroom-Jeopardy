@@ -65,6 +65,7 @@ class TeamState(BaseModel):
     students: List[str] = Field(default_factory=list)
     answered_students: List[str] = Field(default_factory=list)
     correct_counts: Dict[str, int] = Field(default_factory=dict)
+    student_ids: Dict[str, str] = Field(default_factory=dict)
 
 
 class ClueState(BaseModel):
@@ -173,12 +174,14 @@ class JoinRequest(BaseModel):
     session_code: str
     team_name: str
     student_name: str = Field(default="", max_length=80)
+    participant_id: Optional[str] = Field(default=None, max_length=100)
 
 
 class BuzzRequest(BaseModel):
     session_code: str
     team_name: str
     student_name: str = Field(default="", max_length=80)
+    participant_id: Optional[str] = Field(default=None, max_length=100)
 
 
 class SelectClueRequest(BaseModel):
@@ -226,6 +229,13 @@ class MoveStudentRequest(BaseModel):
     from_team_name: str
     to_team_name: str
     student_name: str = Field(max_length=80)
+
+
+class LeaveRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str = Field(max_length=80)
+    participant_id: Optional[str] = Field(default=None, max_length=100)
 
 
 class ScoreOverrideRequest(BaseModel):

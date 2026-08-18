@@ -215,3 +215,99 @@ def test_starting_new_game_keeps_previous_session(tmp_path, monkeypatch) -> None
             assert old_response.status_code == 404
 
     asyncio.run(scenario())
+
+
+def test_browser_join_cleans_other_session_and_leave_is_idempotent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    use_test_store(tmp_path, monkeypatch)
+
+    async def scenario() -> None:
+        transport = ASGITransport(app=main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            first = (
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
+                    auth=AUTH,
+                )
+            ).json()
+            second = (
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
+                    auth=AUTH,
+                )
+            ).json()
+            participant_id = "browser-1"
+            first_join = await client.post(
+                "/api/join",
+                json={
+                    "session_code": first["session_code"],
+                    "team_name": "Red Team",
+                    "student_name": "Alice",
+                    "participant_id": participant_id,
+                },
+            )
+            assert first_join.status_code == 200
+
+            second_join = await client.post(
+                "/api/join",
+                json={
+                    "session_code": second["session_code"],
+                    "team_name": "Blue Team",
+                    "student_name": "Alice",
+                    "participant_id": participant_id,
+                },
+            )
+            assert second_join.status_code == 200
+            assert main.store.get(first["session_code"]).teams[0].students == []
+            assert main.store.get(second["session_code"]).teams[1].students == ["Alice"]
+
+            stale_leave = await client.post(
+                "/api/leave",
+                json={
+                    "session_code": first["session_code"],
+                    "team_name": "Red Team",
+                    "student_name": "Alice",
+                    "participant_id": participant_id,
+                },
+            )
+            assert stale_leave.status_code == 200
+            assert main.store.get(second["session_code"]).teams[1].students == ["Alice"]
+
+            current_leave = await client.post(
+                "/api/leave",
+                json={
+                    "session_code": second["session_code"],
+                    "team_name": "Blue Team",
+                    "student_name": "Alice",
+                    "participant_id": participant_id,
+                },
+            )
+            assert current_leave.status_code == 200
+            assert main.store.get(second["session_code"]).teams[1].students == []
+
+            legacy_join = await client.post(
+                "/api/join",
+                json={
+                    "session_code": first["session_code"],
+                    "team_name": "Red Team",
+                    "student_name": "Legacy Alice",
+                },
+            )
+            assert legacy_join.status_code == 200
+            legacy_leave = await client.post(
+                "/api/leave",
+                json={
+                    "session_code": first["session_code"],
+                    "team_name": "Red Team",
+                    "student_name": "Legacy Alice",
+                    "participant_id": "new-browser-id",
+                },
+            )
+            assert legacy_leave.status_code == 200
+            assert main.store.get(first["session_code"]).teams[0].students == []
+
+    asyncio.run(scenario())

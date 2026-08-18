@@ -77,6 +77,11 @@ class GameStore:
             return None
         return GameState.model_validate(json.loads(row[0]))
 
+    def all(self) -> list[GameState]:
+        with self._lock, self._connect() as conn:
+            rows = conn.execute("SELECT state_json FROM sessions").fetchall()
+        return [GameState.model_validate(json.loads(row[0])) for row in rows]
+
     def delete(self, session_code: str) -> None:
         with self._lock, self._connect() as conn:
             conn.execute(

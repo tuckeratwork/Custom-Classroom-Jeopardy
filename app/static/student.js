@@ -1,6 +1,12 @@
 let sessionCode = localStorage.getItem("jeopardy_session") || "";
 let teamName = localStorage.getItem("jeopardy_team") || "";
 let studentName = localStorage.getItem("jeopardy_student") || "";
+let participantId = localStorage.getItem("jeopardy_participant_id") || "";
+if (!participantId) {
+  participantId = globalThis.crypto?.randomUUID?.()
+    || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem("jeopardy_participant_id", participantId);
+}
 let socket = null;
 let state = null;
 let audioContext = null;
@@ -15,6 +21,7 @@ let finalAdvanceInFlight = false;
 let finalRevealSignature = null;
 let finalActionKey = null;
 let studentMoveNoticeTimer = null;
+let participantClaimAttempted = false;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -308,6 +315,49 @@ function myTeam() {
   return state?.teams?.find((team) => team.name === teamName) || null;
 }
 
+function participantMembership() {
+  for (const team of state?.teams || []) {
+    for (const [name, storedId] of Object.entries(team.student_ids || {})) {
+      if (storedId === participantId) {
+        return { team, studentName: name };
+      }
+    }
+  }
+  return null;
+}
+
+function storedParticipantForStudent(team, name) {
+  const entry = Object.entries(team?.student_ids || {})
+    .find(([student]) => sameIdentity(student, name));
+  return entry?.[1] || null;
+}
+
+async function claimLegacyMembership() {
+  if (participantClaimAttempted) {
+    return;
+  }
+  participantClaimAttempted = true;
+  try {
+    const response = await fetch("/api/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_code: sessionCode,
+        team_name: teamName,
+        student_name: studentName,
+        participant_id: participantId,
+      }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      state = data.state;
+      render();
+    }
+  } catch (_error) {
+    // The websocket can continue showing the legacy membership for this page load.
+  }
+}
+
 function amActiveResponder() {
   return state?.buzz_winner === teamName && state?.buzz_winner_student === studentName;
 }
@@ -315,6 +365,24 @@ function amActiveResponder() {
 function amEarlyBuzzLocked() {
   return (state?.early_buzz_lockouts?.[teamName] || [])
     .some((name) => sameIdentity(name, studentName));
+}
+
+function teamCompletedRotation(team) {
+  const students = team?.students || [];
+  const answered = team?.answered_students || [];
+  return students.length > 0 && students.every((student) => (
+    answered.some((name) => sameIdentity(name, student))
+  ));
+}
+
+function pendingGlobalRotationTeams(team) {
+  if (!state?.global_rotation_enabled || !teamCompletedRotation(team)) {
+    return [];
+  }
+  return state.teams
+    .filter((candidate) => candidate.name !== team.name && !teamCompletedRotation(candidate))
+    .filter((candidate) => (candidate.students || []).length > 0)
+    .map((candidate) => candidate.name);
 }
 
 async function loadTeamsForCode() {
@@ -402,6 +470,19 @@ function renderRemainingTeammates(clue) {
   }
   const students = team.students || [];
   const answered = team.answered_students || [];
+  if (state.global_rotation_enabled && teamCompletedRotation(team)) {
+    const pendingTeams = pendingGlobalRotationTeams(team);
+    if (pendingTeams.length) {
+      const teamList = pendingTeams.length === 1
+        ? pendingTeams[0]
+        : pendingTeams.length === 2
+          ? `${pendingTeams[0]} and ${pendingTeams[1]}`
+          : `${pendingTeams.slice(0, -1).join(", ")}, and ${pendingTeams.at(-1)}`;
+      panel.innerHTML = `Everyone on your team has buzzed in. Waiting for the remaining participants on <strong>${escapeHtml(teamList)}</strong> to buzz in before all buzzers are reset.`;
+      panel.classList.remove("hidden");
+    }
+    return;
+  }
   const lockouts = state.early_buzz_lockouts?.[team.name] || [];
   const rotationReset = !state.global_rotation_enabled && answered.length >= students.length;
   const remaining = students.filter((student) => (
@@ -793,10 +874,33 @@ function render() {
     return;
   }
   let team = myTeam();
-  let stillJoined = team?.students?.some((name) => name.toLowerCase() === studentName.toLowerCase());
+  const membership = participantMembership();
+  if (membership && (membership.team.name !== teamName || !sameIdentity(membership.studentName, studentName))) {
+    const previousTeam = teamName;
+    teamName = membership.team.name;
+    studentName = membership.studentName;
+    localStorage.setItem("jeopardy_team", teamName);
+    localStorage.setItem("jeopardy_student", studentName);
+    $("student-team").textContent = `${studentName} - ${teamName}`;
+    if (previousTeam && previousTeam !== teamName) {
+      const notice = $("student-move-notice");
+      notice.textContent = `Your teacher moved you to ${teamName}.`;
+      notice.classList.remove("hidden");
+      window.clearTimeout(studentMoveNoticeTimer);
+      studentMoveNoticeTimer = window.setTimeout(() => notice.classList.add("hidden"), 6000);
+    }
+    team = membership.team;
+  }
+  const matchingCurrentName = team?.students?.some((name) => sameIdentity(name, studentName));
+  const storedCurrentParticipant = storedParticipantForStudent(team, studentName);
+  const legacyCurrentMembership = matchingCurrentName && !storedCurrentParticipant;
+  let stillJoined = Boolean(membership) || legacyCurrentMembership;
+  if (!membership && legacyCurrentMembership) {
+    claimLegacyMembership();
+  }
   if (teamName && studentName && state.teams?.length && !stillJoined) {
     const matchingTeams = state.teams.filter((candidate) => (
-      candidate.students?.some((name) => name.toLowerCase() === studentName.toLowerCase())
+      candidate.students?.some((name) => sameIdentity(name, studentName))
     ));
     if (matchingTeams.length === 1) {
       const previousTeam = teamName;
@@ -884,6 +988,8 @@ function render() {
     $("student-status").textContent = "Steal opportunity. Buzz when ready.";
   } else if (clue && amEarlyBuzzLocked()) {
     $("student-status").textContent = "Early buzz penalty awarded; you have been locked out from answering this question. Please do not spam the buzzer and allow the 5 second timer to finish.";
+  } else if (clue && !clue.is_daily_double && pendingGlobalRotationTeams(myTeam()).length) {
+    $("student-status").textContent = "Everyone on your team has buzzed in.";
   } else if (clue && !clue.is_daily_double && !canBuzz(clue)) {
     $("student-status").textContent = "Wait for the rest of your team to answer.";
   } else if (clue && !clue.is_daily_double) {
@@ -1053,7 +1159,12 @@ $("join-game").addEventListener("click", async () => {
   const response = await fetch("/api/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_code: sessionCode, team_name: teamName, student_name: studentName }),
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      participant_id: participantId,
+    }),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -1074,7 +1185,12 @@ $("buzz-button").addEventListener("click", async () => {
   const response = await fetch("/api/buzz", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_code: sessionCode, team_name: teamName, student_name: studentName }),
+    body: JSON.stringify({
+      session_code: sessionCode,
+      team_name: teamName,
+      student_name: studentName,
+      participant_id: participantId,
+    }),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -1086,9 +1202,31 @@ $("buzz-button").addEventListener("click", async () => {
   render();
 });
 
-$("change-game").addEventListener("click", () => {
+$("change-game").addEventListener("click", async () => {
+  const previousSessionCode = sessionCode;
+  const previousTeamName = teamName;
+  const previousStudentName = studentName;
+  if (previousSessionCode && previousTeamName && previousStudentName) {
+    try {
+      await fetch("/api/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          session_code: previousSessionCode,
+          team_name: previousTeamName,
+          student_name: previousStudentName,
+          participant_id: participantId,
+        }),
+      });
+    } catch (_error) {
+      // A subsequent join also removes this browser's stale membership.
+    }
+  }
   localStorage.removeItem("jeopardy_session");
+  localStorage.removeItem("jeopardy_team");
   sessionCode = "";
+  teamName = "";
   showJoin();
 });
 

@@ -14,6 +14,7 @@ from app.game import (
     load_game_config,
     lock_daily_double_wager,
     move_student,
+    remove_participant,
     remove_student,
     random_buzz_eligible,
     reset_final,
@@ -406,6 +407,62 @@ def test_teacher_can_move_student_without_losing_buzzer_history() -> None:
     assert state.last_buzz_team == "Blue Team"
     score_current_clue(state, correct=True)
     assert blue.score == clue.value
+
+
+def test_browser_rejoin_moves_membership_without_leaving_stale_student() -> None:
+    state = make_state("DEVICE1")
+    join_team(state, "Red Team", "Alice", "browser-1")
+    red = next(team for team in state.teams if team.name == "Red Team")
+    red.answered_students.append("Alice")
+    red.correct_counts["Alice"] = 2
+
+    join_team(state, "Blue Team", "Alice", "browser-1")
+
+    blue = next(team for team in state.teams if team.name == "Blue Team")
+    assert "Alice" not in red.students
+    assert "Alice" in blue.students
+    assert "Alice" in blue.answered_students
+    assert blue.correct_counts["Alice"] == 2
+    assert blue.student_ids["Alice"] == "browser-1"
+
+
+def test_replaced_browser_cannot_buzz_as_current_student() -> None:
+    state = make_state("DEVICE2")
+    join_team(state, "Red Team", "Alice", "browser-1")
+    join_team(state, "Red Team", "Alice", "browser-2")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    select_clue(state, clue.id)
+
+    with pytest.raises(GameError, match="no longer active"):
+        buzz(state, "Red Team", "Alice", "browser-1")
+    buzz(state, "Red Team", "Alice", "browser-2")
+    assert state.buzz_winner_student == "Alice"
+
+
+def test_remove_participant_clears_active_buzz_and_rotation_membership() -> None:
+    state = make_state("DEVICE3")
+    join_team(state, "Red Team", "Alice", "browser-1")
+    clue = next(
+        clue
+        for category in state.categories
+        for clue in category.clues
+        if not clue.is_daily_double
+    )
+    select_clue(state, clue.id)
+    buzz(state, "Red Team", "Alice", "browser-1")
+
+    remove_participant(state, "browser-1")
+
+    red = next(team for team in state.teams if team.name == "Red Team")
+    assert red.students == []
+    assert red.answered_students == []
+    assert red.student_ids == {}
+    assert state.buzz_winner is None
 
 
 def test_student_move_is_blocked_during_daily_double_and_final() -> None:

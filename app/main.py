@@ -24,8 +24,10 @@ from .game import (
     load_game_config,
     lock_daily_double_wager,
     move_student,
+    participant_membership,
     public_state,
     random_buzz_eligible,
+    remove_participant,
     remove_student,
     reset_buzzer,
     reset_buzzer_rotation,
@@ -57,6 +59,7 @@ from .models import (
     FinalWagerRequest,
     FinalWagersRequest,
     JoinRequest,
+    LeaveRequest,
     MoveStudentRequest,
     ReactionRequest,
     ReactionsToggleRequest,
@@ -260,12 +263,30 @@ async def join(payload: JoinRequest) -> dict:
     try:
         state = store.update(
             payload.session_code,
-            lambda current: join_team(current, payload.team_name, payload.student_name),
+            lambda current: join_team(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.participant_id,
+            ),
         )
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
     except GameError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    changed_session_codes: list[str] = []
+    if payload.participant_id:
+        for other_state in store.all():
+            if other_state.session_code == state.session_code:
+                continue
+            if participant_membership(other_state, payload.participant_id):
+                store.update(
+                    other_state.session_code,
+                    lambda current: remove_participant(current, payload.participant_id or ""),
+                )
+                changed_session_codes.append(other_state.session_code)
+    for changed_session_code in changed_session_codes:
+        await broadcast_state(changed_session_code)
     await broadcast_state(state.session_code)
     return {
         "team_name": payload.team_name,
@@ -274,12 +295,54 @@ async def join(payload: JoinRequest) -> dict:
     }
 
 
+@app.post("/api/leave")
+async def leave(payload: LeaveRequest) -> dict:
+    def leave_current(current):
+        if payload.participant_id:
+            membership = participant_membership(current, payload.participant_id)
+            if membership:
+                return remove_participant(current, payload.participant_id)
+            legacy_team = next(
+                (team for team in current.teams if team.name.lower() == payload.team_name.lower()),
+                None,
+            )
+            legacy_student = next(
+                (
+                    name
+                    for name in (legacy_team.students if legacy_team else [])
+                    if name.lower() == payload.student_name.strip().lower()
+                ),
+                None,
+            )
+            if legacy_team and legacy_student and not any(
+                name.lower() == legacy_student.lower()
+                for name in legacy_team.student_ids
+            ):
+                return remove_student(current, legacy_team.name, legacy_student)
+            return current
+        return remove_student(current, payload.team_name, payload.student_name)
+
+    try:
+        state = store.update(payload.session_code, leave_current)
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await broadcast_state(state.session_code)
+    return {"ok": True}
+
+
 @app.post("/api/buzz")
 async def buzz_route(payload: BuzzRequest) -> dict:
     try:
         state = store.update(
             payload.session_code,
-            lambda current: buzz(current, payload.team_name, payload.student_name),
+            lambda current: buzz(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.participant_id,
+            ),
         )
     except KeyError as exc:
         raise not_found(payload.session_code) from exc
