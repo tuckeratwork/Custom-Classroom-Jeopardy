@@ -311,3 +311,85 @@ def test_browser_join_cleans_other_session_and_leave_is_idempotent(
             assert main.store.get(first["session_code"]).teams[0].students == []
 
     asyncio.run(scenario())
+
+
+def test_final_answer_draft_is_recovered_when_timer_advances(tmp_path, monkeypatch) -> None:
+    use_test_store(tmp_path, monkeypatch)
+
+    async def scenario() -> None:
+        transport = ASGITransport(app=main.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            state = (
+                await client.post(
+                    "/api/game/start",
+                    json={"config_path": GAME_PATH, "team_names": TEAM_NAMES},
+                    auth=AUTH,
+                )
+            ).json()
+            code = state["session_code"]
+            for team_name, student_name, participant_id in (
+                ("Red Team", "Alice", "red-browser"),
+                ("Blue Team", "Ben", "blue-browser"),
+            ):
+                response = await client.post(
+                    "/api/join",
+                    json={
+                        "session_code": code,
+                        "team_name": team_name,
+                        "student_name": student_name,
+                        "participant_id": participant_id,
+                    },
+                )
+                assert response.status_code == 200
+
+            final_state = (
+                await client.post(
+                    "/api/final/reveal",
+                    json={"session_code": code},
+                    auth=AUTH,
+                )
+            ).json()
+            for team_name in TEAM_NAMES:
+                response = await client.post(
+                    "/api/final/wager",
+                    json={
+                        "session_code": code,
+                        "team_name": team_name,
+                        "student_name": final_state["final"]["leaders"][team_name],
+                        "wager": 100,
+                    },
+                )
+                assert response.status_code == 200
+
+            draft_response = await client.post(
+                "/api/final/answer-draft",
+                json={
+                    "session_code": code,
+                    "team_name": "Red Team",
+                    "student_name": "Alice",
+                    "participant_id": "red-browser",
+                    "answer": "Recovered response",
+                    "draft_version": 1,
+                },
+            )
+            assert draft_response.status_code == 200
+
+            def expire_final_answer(current):
+                current.final.answer_expires_at = 1
+                return current
+
+            main.store.update(code, expire_final_answer)
+            advance_response = await client.post(
+                "/api/final/advance",
+                json={"session_code": code},
+            )
+            assert advance_response.status_code == 200
+
+            teacher_state = (
+                await client.get(f"/api/game/{code}?teacher=true", auth=AUTH)
+            ).json()
+            assert teacher_state["final"]["submissions"]["Red Team"] == "Recovered response"
+            assert "Red Team" in teacher_state["final"]["auto_submitted_teams"]
+            assert "answer_drafts" not in teacher_state["final"]
+
+    asyncio.run(scenario())

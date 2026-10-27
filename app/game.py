@@ -23,6 +23,7 @@ from .models import (
 
 FINAL_WAGER_SECONDS = 60
 FINAL_ANSWER_SECONDS = 300
+FINAL_ANSWER_GRACE_SECONDS = 5
 DAILY_DOUBLE_ANSWER_SECONDS = 60
 AUTO_RANDOM_SECONDS = 15
 MANUAL_BUZZ_SECONDS = 10
@@ -202,6 +203,8 @@ def find_clue(state: GameState, clue_id: str) -> ClueState:
 
 def public_state(state: GameState, reveal_answers: bool = False) -> dict:
     payload = state.model_dump()
+    payload["final"].pop("answer_drafts", None)
+    payload["final"].pop("answer_draft_versions", None)
     if not reveal_answers:
         for category in payload["categories"]:
             for clue in category["clues"]:
@@ -289,6 +292,9 @@ def start_final_wager_phase(state: GameState) -> GameState:
     state.final.wager_submitted_by = {}
     state.final.submissions = {}
     state.final.submitted_by = {}
+    state.final.answer_drafts = {}
+    state.final.answer_draft_versions = {}
+    state.final.auto_submitted_teams = []
     state.final.scored = {}
     state.final.final_scores = {}
     state.final.reveal_order = []
@@ -1049,19 +1055,69 @@ def submit_final_wager(
     return state
 
 
+def validate_final_answerer(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    participant_id: Optional[str] = None,
+) -> str:
+    team = find_team(state, team_name)
+    student = normalize_student_name(student_name)
+    if state.final.leaders.get(team_name) != student:
+        raise GameError(f"{student} is not the final leader for {team_name}")
+    stored_participant = student_participant_id(team, student)
+    if participant_id and stored_participant and participant_id != stored_participant:
+        raise GameError("your student session is no longer active in this room")
+    return student
+
+
+def save_final_answer_draft(
+    state: GameState,
+    team_name: str,
+    student_name: str,
+    answer: str,
+    participant_id: Optional[str] = None,
+    draft_version: int = 0,
+) -> GameState:
+    if state.final.phase != "answer":
+        raise GameError("Final Jeopardy answers are not open")
+    validate_final_answerer(state, team_name, student_name, participant_id)
+    if draft_version >= state.final.answer_draft_versions.get(team_name, -1):
+        state.final.answer_drafts[team_name] = answer
+        state.final.answer_draft_versions[team_name] = draft_version
+    return state
+
+
 def submit_final_answer(
     state: GameState,
     team_name: str,
     student_name: str,
     answer: str,
+    participant_id: Optional[str] = None,
+    automatic: bool = False,
 ) -> GameState:
-    if state.final.phase != "answer":
+    expires_at = state.final.answer_expires_at or 0
+    if automatic and state.final.phase == "answer" and time.time() < expires_at:
+        raise GameError("Final Jeopardy answer timer has not expired")
+    replacing_auto_submission = (
+        state.final.phase == "review"
+        and team_name in state.final.auto_submitted_teams
+        and time.time() <= expires_at + FINAL_ANSWER_GRACE_SECONDS
+    )
+    if state.final.phase != "answer" and not replacing_auto_submission:
         raise GameError("Final Jeopardy answers are not open")
-    student = normalize_student_name(student_name)
-    if state.final.leaders.get(team_name) != student:
-        raise GameError(f"{student} is not the final leader for {team_name}")
+    student = validate_final_answerer(state, team_name, student_name, participant_id)
     state.final.submissions[team_name] = answer.strip()
     state.final.submitted_by[team_name] = student
+    state.final.answer_drafts.pop(team_name, None)
+    state.final.answer_draft_versions.pop(team_name, None)
+    if automatic:
+        if team_name not in state.final.auto_submitted_teams:
+            state.final.auto_submitted_teams.append(team_name)
+    else:
+        state.final.auto_submitted_teams = [
+            name for name in state.final.auto_submitted_teams if name != team_name
+        ]
     if len(state.final.submissions) >= len(active_final_teams(state)):
         state.phase = "final_review"
         state.final.phase = "review"
@@ -1078,8 +1134,14 @@ def advance_final_timers(state: GameState) -> GameState:
         if now >= state.final.answer_expires_at:
             for team in active_final_teams(state):
                 if team.name not in state.final.submissions:
-                    state.final.submissions[team.name] = ""
-                    state.final.submitted_by[team.name] = "Timer"
+                    draft = state.final.answer_drafts.pop(team.name, "").strip()
+                    state.final.answer_draft_versions.pop(team.name, None)
+                    state.final.submissions[team.name] = draft
+                    state.final.submitted_by[team.name] = (
+                        state.final.leaders.get(team.name, "Timer") if draft else "Timer"
+                    )
+                    if team.name not in state.final.auto_submitted_teams:
+                        state.final.auto_submitted_teams.append(team.name)
             state.phase = "final_review"
             state.final.phase = "review"
     return state

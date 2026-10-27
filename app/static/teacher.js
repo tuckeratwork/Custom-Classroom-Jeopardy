@@ -649,7 +649,8 @@ async function advanceFinalIfExpired() {
     : phase === "answer"
       ? state.final.answer_expires_at
       : null;
-  if (!expiresAt || Date.now() / 1000 < expiresAt) {
+  const studentSubmissionGrace = phase === "answer" ? 1.5 : 0;
+  if (!expiresAt || Date.now() / 1000 < expiresAt + studentSubmissionGrace) {
     return;
   }
   finalAdvanceInFlight = true;
@@ -719,11 +720,15 @@ function renderFinal() {
     const scored = state.final.scored[team.name];
     const leader = state.final.leaders[team.name] || "No leader yet";
     const submitted = state.final.submissions[team.name] ?? "";
+    const autoSubmitted = (state.final.auto_submitted_teams || []).includes(team.name);
     row.innerHTML = `
       <span><strong>${escapeHtml(team.name)}</strong><br><small>Leader: ${escapeHtml(leader)}</small></span>
       <span><small>Wager</small><br><strong>$${wager}</strong></span>
       <label><input data-final-team="${team.name}" type="checkbox" ${scored === true ? "checked" : ""}> Correct</label>
-      <div class="final-submission">${submitted ? escapeHtml(submitted) : "<span class=\"muted\">No answer submitted</span>"}</div>
+      <div class="final-submission">
+        ${submitted ? escapeHtml(submitted) : "<span class=\"muted\">No answer entered</span>"}
+        ${autoSubmitted ? "<br><small class=\"muted\">Auto-submitted when time expired</small>" : ""}
+      </div>
     `;
     wagers.appendChild(row);
   });

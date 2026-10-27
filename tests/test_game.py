@@ -21,6 +21,7 @@ from app.game import (
     reset_buzzer,
     reset_buzzer_rotation,
     reveal_final,
+    save_final_answer_draft,
     score_current_clue,
     score_final,
     select_clue,
@@ -1002,6 +1003,95 @@ def test_final_jeopardy_scoring_once() -> None:
     assert state.final.reveal_spinning_index is None
     assert state.final.reveal_step == 1
     assert state.phase == "complete"
+
+
+def test_final_timer_submits_saved_answer_drafts(monkeypatch) -> None:
+    state = make_state("FINALDRAFT")
+    join_classroom(state)
+    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 100)
+    submit_final_wager(state, "Blue Team", "Ben", 100)
+    save_final_answer_draft(state, "Red Team", "Alice", "  Draft response  ")
+    state.final.answer_expires_at = 1000
+    monkeypatch.setattr("app.game.time.time", lambda: 1000)
+
+    advance_final_timers(state)
+
+    assert state.final.phase == "review"
+    assert state.final.submissions == {
+        "Red Team": "Draft response",
+        "Blue Team": "",
+    }
+    assert state.final.submitted_by == {
+        "Red Team": "Alice",
+        "Blue Team": "Timer",
+    }
+    assert state.final.auto_submitted_teams == ["Red Team", "Blue Team"]
+    assert state.final.answer_drafts == {}
+    assert "answer_drafts" not in public_state(state)["final"]
+    assert "answer_draft_versions" not in public_state(state)["final"]
+
+
+def test_older_final_draft_request_cannot_overwrite_newer_typing() -> None:
+    state = make_state("FINALORDER")
+    join_classroom(state)
+    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 100)
+    submit_final_wager(state, "Blue Team", "Ben", 100)
+
+    save_final_answer_draft(state, "Red Team", "Alice", "newer", draft_version=2)
+    save_final_answer_draft(state, "Red Team", "Alice", "older", draft_version=1)
+
+    assert state.final.answer_drafts["Red Team"] == "newer"
+    assert state.final.answer_draft_versions["Red Team"] == 2
+
+
+def test_final_answer_can_replace_auto_submission_during_boundary_grace(monkeypatch) -> None:
+    state = make_state("FINALGRACE")
+    join_classroom(state)
+    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 100)
+    submit_final_wager(state, "Blue Team", "Ben", 100)
+    state.final.answer_expires_at = 1000
+    monkeypatch.setattr("app.game.time.time", lambda: 1000)
+    advance_final_timers(state)
+
+    monkeypatch.setattr("app.game.time.time", lambda: 1004)
+    submit_final_answer(state, "Red Team", "Alice", "Arrived at the boundary")
+
+    assert state.final.submissions["Red Team"] == "Arrived at the boundary"
+    assert "Red Team" not in state.final.auto_submitted_teams
+
+    monkeypatch.setattr("app.game.time.time", lambda: 1006)
+    with pytest.raises(GameError, match="answers are not open"):
+        submit_final_answer(state, "Blue Team", "Ben", "Too late")
+
+
+def test_final_answer_cannot_auto_submit_before_timer_expires(monkeypatch) -> None:
+    state = make_state("FINALEARLY")
+    join_classroom(state)
+    reveal_final(state)
+    state.final.leaders["Red Team"] = "Alice"
+    state.final.leaders["Blue Team"] = "Ben"
+    submit_final_wager(state, "Red Team", "Alice", 100)
+    submit_final_wager(state, "Blue Team", "Ben", 100)
+    state.final.answer_expires_at = 1000
+    monkeypatch.setattr("app.game.time.time", lambda: 999)
+
+    with pytest.raises(GameError, match="timer has not expired"):
+        submit_final_answer(
+            state,
+            "Red Team",
+            "Alice",
+            "Too early",
+            automatic=True,
+        )
 
 
 def test_final_cannot_score_or_calculate_before_review() -> None:

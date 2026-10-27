@@ -33,6 +33,7 @@ from .game import (
     reset_buzzer_rotation,
     reset_final,
     reveal_final,
+    save_final_answer_draft,
     score_current_clue,
     score_final,
     select_clue,
@@ -55,6 +56,7 @@ from .models import (
     DailyDoubleStudentWagerRequest,
     DailyDoubleWagerRequest,
     FinalAnswerRequest,
+    FinalAnswerDraftRequest,
     FinalScoreRequest,
     FinalWagerRequest,
     FinalWagersRequest,
@@ -715,6 +717,8 @@ async def final_answer_route(payload: FinalAnswerRequest) -> dict:
                 payload.team_name,
                 payload.student_name,
                 payload.answer,
+                payload.participant_id,
+                payload.automatic,
             ),
         )
     except KeyError as exc:
@@ -723,6 +727,27 @@ async def final_answer_route(payload: FinalAnswerRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await broadcast_state(state.session_code)
     return public_state(state)
+
+
+@app.post("/api/final/answer-draft")
+async def final_answer_draft_route(payload: FinalAnswerDraftRequest) -> dict:
+    try:
+        store.update(
+            payload.session_code,
+            lambda current: save_final_answer_draft(
+                current,
+                payload.team_name,
+                payload.student_name,
+                payload.answer,
+                payload.participant_id,
+                payload.draft_version,
+            ),
+        )
+    except KeyError as exc:
+        raise not_found(payload.session_code) from exc
+    except GameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @app.post("/api/final/score")

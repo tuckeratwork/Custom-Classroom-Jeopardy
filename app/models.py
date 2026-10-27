@@ -111,6 +111,9 @@ class FinalState(BaseModel):
     wager_submitted_by: Dict[str, str] = Field(default_factory=dict)
     submissions: Dict[str, str] = Field(default_factory=dict)
     submitted_by: Dict[str, str] = Field(default_factory=dict)
+    answer_drafts: Dict[str, str] = Field(default_factory=dict)
+    answer_draft_versions: Dict[str, int] = Field(default_factory=dict)
+    auto_submitted_teams: List[str] = Field(default_factory=list)
     scored: Dict[str, bool] = Field(default_factory=dict)
     final_scores: Dict[str, int] = Field(default_factory=dict)
     reveal_order: List[str] = Field(default_factory=list)
@@ -265,6 +268,17 @@ class FinalAnswerRequest(BaseModel):
     team_name: str
     student_name: str
     answer: str
+    participant_id: Optional[str] = Field(default=None, max_length=100)
+    automatic: bool = False
+
+
+class FinalAnswerDraftRequest(BaseModel):
+    session_code: str
+    team_name: str
+    student_name: str
+    answer: str
+    participant_id: Optional[str] = Field(default=None, max_length=100)
+    draft_version: int = Field(default=0, ge=0)
 
 
 class DailyDoubleWagerRequest(BaseModel):

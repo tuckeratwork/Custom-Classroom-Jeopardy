@@ -151,13 +151,13 @@ When all board clues are complete, the game moves into Final Jeopardy.
 - Before wagers are locked, the final category, prompt, and answer stay hidden.
 - Student team leaders enter wagers from their devices. A team may wager up to its current score, or up to `$500` if the team has less than `$500`.
 - Once wagers are locked, the final category and prompt are revealed.
-- Team leaders submit final answers from their devices.
+- Team leaders submit final answers from their devices. Answers are saved privately as they type. If the timer expires before the leader presses **Submit answer**, the text currently in the answer field is automatically submitted and identified as an automatic submission in the teacher panel.
 - The teacher reviews each submission and marks each team correct or incorrect.
 - **Calculate Final Scores** computes the final totals after all wagers and answers are ready for review.
 - **Reveal Next Place** steps through the final results on the presentation board.
 - **Reset Final Jeopardy** restarts the Final Jeopardy wager phase after a confirmation popup.
 
-If students do not submit before timers expire, the app advances with default wager or blank answer behavior.
+If students do not lock a wager before the wager timer expires, the app uses the maximum allowed wager. If a Final Jeopardy answer timer expires, the app submits any text the leader entered; a completely empty field is recorded as no answer.
 
 ## Presentation Board
 

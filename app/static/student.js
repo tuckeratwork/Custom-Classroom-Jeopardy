@@ -22,6 +22,11 @@ let finalRevealSignature = null;
 let finalActionKey = null;
 let studentMoveNoticeTimer = null;
 let participantClaimAttempted = false;
+let finalAnswerDraft = "";
+let finalAnswerDraftKey = null;
+let finalAnswerDraftVersion = 0;
+let finalDraftSaveTimer = null;
+let finalAnswerSubmitInFlight = false;
 
 const $ = (id) => document.getElementById(id);
 const audioCacheBust = `v=${Date.now()}`;
@@ -666,6 +671,13 @@ function renderFinalAction() {
   }
 
   if (phase === "answer") {
+    const draftKey = `${sessionCode}:${teamName}:${state.final.answer_started_at || "answer"}`;
+    if (finalAnswerDraftKey !== draftKey) {
+      finalAnswerDraftKey = draftKey;
+      finalAnswerDraft = "";
+      finalAnswerDraftVersion = 0;
+      window.clearTimeout(finalDraftSaveTimer);
+    }
     action.innerHTML = `
       <h2>${escapeHtml(state.final.category)}</h2>
       <p id="student-final-countdown" class="final-countdown">${countdownText(state.final.answer_expires_at)}</p>
@@ -680,11 +692,15 @@ function renderFinalAction() {
     `;
     if (previousAnswer !== undefined && $("final-answer-input")) {
       $("final-answer-input").value = previousAnswer;
+      finalAnswerDraft = previousAnswer;
+    } else if ($("final-answer-input")) {
+      $("final-answer-input").value = finalAnswerDraft;
     }
     if (previousError) {
       $("final-submit-error").textContent = previousError;
     }
-    $("submit-final-answer")?.addEventListener("click", submitFinalAnswer);
+    $("final-answer-input")?.addEventListener("input", queueFinalAnswerDraft);
+    $("submit-final-answer")?.addEventListener("click", () => submitFinalAnswer());
     return;
   }
 
@@ -855,6 +871,16 @@ async function advanceFinalIfExpired() {
   }
   finalAdvanceInFlight = true;
   try {
+    if (
+      phase === "answer"
+      && state.final.leaders[teamName] === studentName
+      && state.final.submissions[teamName] === undefined
+    ) {
+      window.clearTimeout(finalDraftSaveTimer);
+      const answer = $("final-answer-input")?.value ?? finalAnswerDraft;
+      finalAnswerDraft = answer;
+      await sendFinalAnswer(answer, true);
+    }
     const response = await fetch("/api/final/advance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1113,6 +1139,71 @@ async function submitFinalWager() {
   render();
 }
 
+function queueFinalAnswerDraft(event) {
+  finalAnswerDraft = event.target.value;
+  finalAnswerDraftVersion += 1;
+  window.clearTimeout(finalDraftSaveTimer);
+  const draftVersion = finalAnswerDraftVersion;
+  finalDraftSaveTimer = window.setTimeout(() => {
+    saveFinalAnswerDraft(finalAnswerDraft, draftVersion);
+  }, 300);
+}
+
+async function saveFinalAnswerDraft(answer, draftVersion) {
+  try {
+    await fetch("/api/final/answer-draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_code: sessionCode,
+        team_name: teamName,
+        student_name: studentName,
+        participant_id: participantId,
+        answer,
+        draft_version: draftVersion,
+      }),
+    });
+  } catch (_error) {
+    // The timer submission will retry with the current field contents.
+  }
+}
+
+async function sendFinalAnswer(answer, automatic = false) {
+  if (finalAnswerSubmitInFlight) {
+    return false;
+  }
+  finalAnswerSubmitInFlight = true;
+  try {
+    const response = await fetch("/api/final/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_code: sessionCode,
+        team_name: teamName,
+        student_name: studentName,
+        participant_id: participantId,
+        answer,
+        automatic,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (!automatic) {
+        const error = $("final-submit-error");
+        if (error) {
+          error.textContent = data.detail || "Unable to submit answer.";
+        }
+      }
+      return false;
+    }
+    state = data;
+    render();
+    return true;
+  } finally {
+    finalAnswerSubmitInFlight = false;
+  }
+}
+
 async function submitFinalAnswer() {
   const input = $("final-answer-input");
   const error = $("final-submit-error");
@@ -1122,27 +1213,12 @@ async function submitFinalAnswer() {
     input.focus();
     return;
   }
-  if (!window.confirm("Submit this as your team's final answer?")) {
-    return;
-  }
-  const response = await fetch("/api/final/answer", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_code: sessionCode,
-      team_name: teamName,
-      student_name: studentName,
-      answer,
-    }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    error.textContent = data.detail || "Unable to submit answer.";
+  window.clearTimeout(finalDraftSaveTimer);
+  finalAnswerDraft = input.value;
+  const submitted = await sendFinalAnswer(input.value, false);
+  if (!submitted && document.body.contains(input)) {
     input.focus();
-    return;
   }
-  state = data;
-  render();
 }
 
 $("join-code").value = sessionCode;
