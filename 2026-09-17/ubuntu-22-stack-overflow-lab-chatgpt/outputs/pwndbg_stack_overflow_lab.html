@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seeing a 32-bit Stack Buffer Overflow with Pwndbg</title>
+  <style>
+    :root{--ink:#172033;--muted:#5b6475;--paper:#fff;--wash:#f4f7fb;--line:#d9e0ea;--navy:#13233f;--blue:#2869d8;--cyan:#dff5ff;--green:#dcf7e7;--amber:#fff1c9;--red:#ffe0e0;--purple:#eee4ff;--code:#101827;--codeink:#e8eef9}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--wash);color:var(--ink);font:16px/1.62 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    header{background:linear-gradient(135deg,#101b32,#173f76);color:white;padding:3.5rem max(1.2rem,calc((100vw - 1100px)/2));border-bottom:6px solid #56c8ff}
+    header p{max-width:820px;color:#dbeaff;font-size:1.08rem} header .kicker{text-transform:uppercase;letter-spacing:.13em;font-weight:800;color:#7ed8ff;font-size:.8rem}
+    h1{font-size:clamp(2.25rem,5vw,4.4rem);line-height:1.02;margin:.45rem 0 1rem;max-width:900px} h2{font-size:1.9rem;margin-top:0} h3{font-size:1.2rem;margin-top:2rem}
+    main{max-width:1100px;margin:auto;padding:2rem 1.2rem 6rem;display:grid;grid-template-columns:245px minmax(0,1fr);gap:2rem}
+    nav{position:sticky;top:1rem;align-self:start;background:white;border:1px solid var(--line);border-radius:14px;padding:1rem;box-shadow:0 8px 28px #17304f12}
+    nav strong{display:block;margin-bottom:.55rem} nav a{display:block;color:#33445f;text-decoration:none;padding:.33rem .45rem;border-radius:7px;font-size:.91rem} nav a:hover{background:#edf4ff;color:#1354b8}
+    article{min-width:0}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(1.2rem,3vw,2.2rem);margin-bottom:1.35rem;box-shadow:0 8px 28px #17304f0d}
+    .callout{border-left:5px solid var(--blue);background:#eef5ff;padding:1rem 1.1rem;border-radius:8px;margin:1.1rem 0}.callout.warn{border-color:#d69700;background:var(--amber)}.callout.safe{border-color:#26995c;background:var(--green)}.callout.key{border-color:#8452ce;background:var(--purple)}
+    .codebox{position:relative;background:var(--code);color:var(--codeink);border-radius:11px;margin:1rem 0;overflow:hidden}.codebox .label{padding:.45rem .85rem;background:#1c2940;color:#9fb1ca;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}.codebox pre{margin:0;padding:1.05rem 3.8rem 1.05rem 1rem;overflow:auto;font:14px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}.copy{position:absolute;right:.7rem;top:2.55rem;border:1px solid #53637c;background:#253652;color:white;border-radius:7px;padding:.35rem .55rem;cursor:pointer}.copy:hover{background:#36517b}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf1f6;padding:.08em .3em;border-radius:4px} pre code{background:none;padding:0}
+    table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.94rem}th,td{text-align:left;border-bottom:1px solid var(--line);padding:.65rem .55rem;vertical-align:top}th{background:#eef3f9;color:#273751}
+    .diagram{font:14px/1.38 ui-monospace,SFMono-Regular,Consolas,monospace;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:1rem;overflow:auto;white-space:pre}.legend{display:flex;flex-wrap:wrap;gap:.6rem;margin:.7rem 0}.chip{padding:.25rem .55rem;border-radius:999px;font-size:.82rem;border:1px solid #0001}.a{background:#dcecff}.c{background:#fff0b8}.b{background:#e8dcff}.x{background:#ffdada}
+    .shot{border:2px dashed #9aabc0;border-radius:12px;background:#f7fafc;color:#69778b;padding:1.5rem;text-align:center;margin:1.2rem 0}.checklist li{margin:.45rem 0}.small{color:var(--muted);font-size:.9rem}.step{display:inline-grid;place-items:center;width:2rem;height:2rem;background:var(--navy);color:white;border-radius:50%;font-weight:800;margin-right:.4rem}.answer{border-top:1px dashed var(--line);margin-top:1rem;padding-top:.8rem}.answer summary{cursor:pointer;font-weight:700;color:#244f8c}.pagebreak{break-before:page}
+    footer{color:#66758a;text-align:center;padding:2rem}
+    @media(max-width:830px){main{grid-template-columns:1fr}nav{position:relative;top:0}nav .links{columns:2}}
+    @media print{body{background:white;font-size:11pt}header{padding:1.2cm;color:black;background:white;border-bottom:3px solid #222}header p,.kicker{color:#333!important}main{display:block;max-width:none;padding:0}nav,.copy{display:none}.card{box-shadow:none;border:0;border-radius:0;padding:.35cm 0;margin:0}.codebox{break-inside:avoid}.shot{min-height:4cm}.answer{display:none}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="kicker">Ubuntu 22.04 · x86 / 32-bit · GDB + Pwndbg</div>
+  <h1>Seeing a Stack Buffer Overflow</h1>
+  <p>A guided, local-only lab for students with minimal computer-architecture experience. You will build a deliberately vulnerable teaching program, watch its stack frame appear one instruction at a time, and use printable marker bytes to see a saved frame pointer and return address become corrupted.</p>
+</header>
+<main>
+  <nav aria-label="Lab contents"><strong>Lab contents</strong><div class="links">
+    <a href="#outcomes">1. Outcomes and scope</a><a href="#model">2. Mental model</a><a href="#setup">3. Install tools</a><a href="#program">4. Build the program</a><a href="#pwndbg">5. Learn Pwndbg</a><a href="#call">6. Watch the frame form</a><a href="#safe">7. Safe copy baseline</a><a href="#overflow">8. Marked overflow</a><a href="#return">9. leave and ret</a><a href="#lifetime">10. Frame lifetime</a><a href="#mitigate">11. Restore defenses</a><a href="#questions">12. Questions</a><a href="#reference">Command reference</a>
+  </div></nav>
+  <article>
+    <section id="outcomes" class="card">
+      <h2>1. Outcomes and laboratory scope</h2>
+      <p>By the end, you should be able to explain what <strong>EIP</strong>, <strong>EBP</strong>, and <strong>ESP</strong> do; distinguish live registers from saved values in memory; locate a local buffer, compiler padding, saved EBP, return address, and first parameter; and explain why <code>leave</code> and <code>ret</code> reveal an overwrite only when the function returns.</p>
+      <div class="callout safe"><strong>Scope:</strong> run this only in your own Ubuntu lab VM. The exercise uses a purpose-built local binary, a non-executable stack, and printable <code>A/C/B/X</code> markers. It does not inject code, open a shell, contact a network service, or target third-party software.</div>
+      <p><strong>Estimated time:</strong> 75–110 minutes. <strong>Evidence to submit:</strong> the screenshots called out in dashed boxes, a completed stack diagram, and answers to the review questions.</p>
+    </section>
+
+    <section id="model" class="card">
+      <h2>2. Mental model: code, registers, and the stack</h2>
+      <p>The function’s machine instructions stay in the executable’s <em>code</em> mapping. A function call does not copy those instructions onto the stack. Instead, the stack holds short-lived call data: parameters, a return address, saved register values, and local variables.</p>
+      <table><thead><tr><th>Register</th><th>Plain-language job</th><th>Where its value comes from</th></tr></thead><tbody>
+        <tr><td><code>EIP</code></td><td>Instruction pointer: address of the instruction currently being executed.</td><td>The CPU advances it after ordinary instructions. <code>call</code>, branches, and <code>ret</code> replace it with another code address.</td></tr>
+        <tr><td><code>ESP</code></td><td>Stack pointer: address of the current top of the stack.</td><td><code>push</code>, <code>pop</code>, <code>call</code>, <code>ret</code>, and explicit arithmetic change it. On 32-bit x86, pushes move it toward lower addresses.</td></tr>
+        <tr><td><code>EBP</code></td><td>Frame pointer: a stable reference point for the current function’s frame.</td><td>The usual prologue saves the caller’s EBP, then copies ESP into EBP. The compiler addresses locals below it and parameters above it.</td></tr>
+      </tbody></table>
+      <div class="diagram">HIGHER ADDRESSES
+
+  [EBP+8]  first parameter: a pointer to the source string
+  [EBP+4]  saved return address  ── ret later loads this into EIP
+  [EBP]    saved caller EBP      ── leave later pops this into EBP
+  [EBP-8]  compiler padding
+       ...
+  [EBP-40] buffer[0]             ── local 32-byte array begins here
+            ↑ ESP at our chosen checkpoint
+
+LOWER ADDRESSES  (the stack grows in this direction)</div>
+      <div class="callout key"><strong>Do not mix up a slot with its contents.</strong> The slot at <code>[EBP+8]</code> contains a four-byte pointer value. That pointer identifies where the input characters live. It is data, not an instruction.</div>
+    </section>
+
+    <section id="setup" class="card pagebreak">
+      <h2>3. Install the 32-bit toolchain and Pwndbg</h2>
+      <h3><span class="step">A</span>Install the compiler and 32-bit libraries</h3>
+      <div class="codebox"><div class="label">Bash — package setup</div><button class="copy">Copy</button><pre>sudo apt update
+sudo apt install -y build-essential gcc-multilib libc6-dev-i386 git gdb</pre></div>
+      <p><code>sudo</code> runs the package operation with administrator rights. <code>apt update</code> refreshes Ubuntu’s package index. <code>build-essential</code> supplies the normal C build tools; <code>gcc-multilib</code> and <code>libc6-dev-i386</code> let a 64-bit Ubuntu host compile and link 32-bit programs; <code>git</code> downloads Pwndbg’s repository; and <code>gdb</code> is the debugger Pwndbg extends.</p>
+      <h3><span class="step">B</span>Install Pwndbg from its GitHub repository</h3>
+      <div class="codebox"><div class="label">Bash — official source install</div><button class="copy">Copy</button><pre>cd ~
+git clone https://github.com/pwndbg/pwndbg
+cd pwndbg
+./setup.sh</pre></div>
+      <p><code>cd ~</code> moves to your home directory. <code>git clone</code> creates a local copy of the official repository. <code>cd pwndbg</code> enters it. <code>./setup.sh</code> installs Pwndbg’s dependencies and configures GDB to load it. If the repository already exists, do not clone a second copy; enter it and follow the project’s update instructions instead.</p>
+      <div class="callout warn"><strong>Dated compatibility note (September 2026):</strong> the Pwndbg project currently lists GDB 12.1+, Python 3.10+, and Ubuntu 22.04/24.04 as supported. Its maintainers have discussed ending source-install support for Ubuntu 22.04 after October 2026; the official portable GDB package is the fallback if a future source version no longer installs on Jammy.</div>
+      <h3><span class="step">C</span>Verify that Pwndbg loads</h3>
+      <div class="codebox"><div class="label">Bash, then Pwndbg</div><button class="copy">Copy</button><pre>gdb -q
+version
+quit</pre></div>
+      <p><code>gdb -q</code> starts GDB without its long banner. A <code>pwndbg&gt;</code> prompt and a Pwndbg version line confirm that the extension loaded. <code>quit</code> exits.</p>
+      <div class="shot">Screenshot 1 — Pwndbg loaded at a <code>pwndbg&gt;</code> prompt</div>
+    </section>
+
+    <section id="program" class="card">
+      <h2>4. Create and compile the teaching program</h2>
+      <p>Create a working folder, then save the supplied <code>stack_lab.c</code> there. The complete source is also shown below.</p>
+      <div class="codebox"><div class="label">Bash</div><button class="copy">Copy</button><pre>mkdir -p ~/stack-frame-lab
+cd ~/stack-frame-lab</pre></div>
+      <div class="codebox"><div class="label">C — stack_lab.c</div><button class="copy">Copy</button><pre>#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+
+__attribute__((noinline))
+void copy_label(const char *student_text)
+{
+    char buffer[32];
+
+    puts("Inside copy_label()");
+    printf("  buffer starts at %p\n", (void *)buffer);
+
+    /* Intentionally unsafe for this local, controlled teaching lab. */
+    strcpy(buffer, student_text);
+
+    printf("  first 32 bytes: %.32s\n", buffer);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s TEXT\n", argv[0]);
+        return 1;
+    }
+
+    copy_label(argv[1]);
+    puts("copy_label() returned normally.");
+    return 0;
+}</pre></div>
+      <p><code>buffer[32]</code> reserves 32 bytes in each active invocation of <code>copy_label</code>. <code>student_text</code> is a pointer parameter. <code>strcpy</code> copies bytes until a terminating zero byte and does not know the destination size—this is the deliberate defect. <code>noinline</code> prevents the compiler from merging the function into <code>main</code>.</p>
+      <div class="codebox"><div class="label">Bash — compile on one line</div><button class="copy">Copy</button><pre>gcc -m32 -O0 -g3 -Wall -Wextra -fno-stack-protector -fno-omit-frame-pointer -fno-pie -no-pie -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -z noexecstack -o stack_lab32 stack_lab.c</pre></div>
+      <table><thead><tr><th>Option</th><th>Purpose in this lab</th></tr></thead><tbody>
+        <tr><td><code>-m32</code></td><td>Generate 32-bit x86 code, so the registers are EIP/EBP/ESP and stack words are four bytes.</td></tr>
+        <tr><td><code>-O0</code></td><td>Disable optimization so the source, frame, and disassembly remain easy to follow.</td></tr>
+        <tr><td><code>-g3</code></td><td>Include detailed debug symbols so GDB knows names such as <code>buffer</code>.</td></tr>
+        <tr><td><code>-Wall -Wextra</code></td><td>Enable useful compiler warnings.</td></tr>
+        <tr><td><code>-fno-stack-protector</code></td><td>Turn off the canary only for this teaching binary so the saved frame data remains observable.</td></tr>
+        <tr><td><code>-fno-omit-frame-pointer</code></td><td>Keep the EBP-based frame used by the lesson.</td></tr>
+        <tr><td><code>-fno-pie -no-pie</code></td><td>Produce a non-PIE executable so code addresses are stable across runs.</td></tr>
+        <tr><td><code>-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0</code></td><td>Disable fortified library replacement for this one binary.</td></tr>
+        <tr><td><code>-z noexecstack</code></td><td>Keep the stack non-executable; this lab demonstrates corruption, not code execution.</td></tr>
+        <tr><td><code>-o stack_lab32 stack_lab.c</code></td><td>Name the output binary and specify the input source file.</td></tr>
+      </tbody></table>
+      <div class="codebox"><div class="label">Bash — verify and test</div><button class="copy">Copy</button><pre>file ./stack_lab32
+readelf -W -l ./stack_lab32 | grep GNU_STACK
+./stack_lab32 SAFE_INPUT</pre></div>
+      <p><code>file</code> should report a 32-bit Intel 80386 ELF with debug information. <code>readelf</code> inspects program headers; <code>GNU_STACK</code> should show <code>RW</code>, not <code>RWE</code>. The final command supplies a short safe argument and should return normally.</p>
+    </section>
+
+    <section id="pwndbg" class="card">
+      <h2>5. Five Pwndbg views used in this lab</h2>
+      <table><thead><tr><th>Command</th><th>What it shows</th><th>Why we use it</th></tr></thead><tbody>
+        <tr><td><code>context</code></td><td>The enhanced register, disassembly, source, stack, and backtrace panels.</td><td>One visual snapshot whenever execution stops.</td></tr>
+        <tr><td><code>regs eip ebp esp</code></td><td>Selected registers with enhanced interpretation.</td><td>Focuses attention on the three registers in the lesson.</td></tr>
+        <tr><td><code>nearpc</code></td><td>Instructions around the current program counter.</td><td>Shows what EIP identifies and what instruction comes next.</td></tr>
+        <tr><td><code>telescope ADDRESS COUNT</code></td><td>Four-byte stack entries and pointer chains.</td><td>Creates the closest thing to a visual frame map.</td></tr>
+        <tr><td><code>hexdump ADDRESS COUNT</code></td><td>Raw bytes plus printable characters.</td><td>Makes <code>A</code>, <code>C</code>, <code>B</code>, and <code>X</code> visibly distinct.</td></tr>
+      </tbody></table>
+      <p>GDB commands still work inside Pwndbg. We will use <code>p</code> for expressions, <code>x</code> to examine memory, <code>break</code> for breakpoints, <code>si</code> to execute one machine instruction, and <code>continue</code> to resume.</p>
+      <div class="callout"><strong>Terminal paste note:</strong> the copy button copies the whole block. Most terminals submit each line correctly. If your GDB prompt treats a multiline paste as one malformed command, copy or enter the same lines one at a time and wait for the <code>pwndbg&gt;</code> prompt after each.</div>
+    </section>
+
+    <section id="call" class="card pagebreak">
+      <h2>6. Watch <code>copy_label</code> build its frame</h2>
+      <h3>Checkpoint 1 — before the call</h3>
+      <div class="codebox"><div class="label">Bash</div><button class="copy">Copy</button><pre>cd ~/stack-frame-lab
+gdb -q ./stack_lab32</pre></div>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>set pagination off
+set disassembly-flavor intel
+disassemble main</pre></div>
+      <p>In the disassembly, find the instruction <code>call copy_label</code>. Copy its address from the left column, then substitute it below. The address is determined from your binary instead of assumed from a screenshot.</p>
+      <div class="codebox"><div class="label">Pwndbg — replace the placeholder</div><button class="copy">Copy</button><pre>break *CALL_ADDRESS
+run SAFE_INPUT
+regs eip ebp esp
+nearpc
+telescope $esp 4
+p/x &amp;buffer</pre></div>
+      <p><code>break *ADDRESS</code> places an instruction breakpoint; the asterisk means “break at this exact machine address.” <code>run SAFE_INPUT</code> starts the program with one argument. Before <code>call</code>, ESP points at the already-pushed pointer parameter. The expected <code>p/x &amp;buffer</code> result is “No symbol … in current context,” because <code>copy_label</code> is not active yet and its local object does not exist.</p>
+      <h3>Checkpoint 2 — after <code>call</code></h3>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>si
+regs eip ebp esp
+nearpc
+telescope $esp 3</pre></div>
+      <p><code>si</code> means “step one machine instruction.” The CPU has now pushed the address of the instruction after <code>call</code> and changed EIP to the first instruction of <code>copy_label</code>. EBP still belongs to <code>main</code>. At <code>[$esp]</code> you should see the saved return address, and at <code>[$esp+4]</code> the parameter pointer.</p>
+      <h3>Checkpoint 3 — execute the prologue</h3>
+      <div class="codebox"><div class="label">Pwndbg — execute and inspect each instruction separately</div><button class="copy">Copy</button><pre>si
+regs eip ebp esp
+telescope $esp 3
+si
+regs eip ebp esp
+telescope $ebp 3
+si
+regs eip ebp esp
+p/x &amp;buffer[0]
+p/x &amp;buffer[31]
+p/x &amp;buffer[32]
+distance &amp;buffer[0] $ebp
+telescope $ebp-0x28 13</pre></div>
+      <p>The three instructions should be <code>push ebp</code>, <code>mov ebp,esp</code>, and <code>sub esp,0x28</code>. The push stores <code>main</code>’s EBP. The move makes EBP the new frame anchor. The subtraction reserves <code>0x28</code> hexadecimal = 40 decimal bytes. Only 32 belong to <code>buffer</code>; in this build the remaining eight are compiler padding. The bytes are reserved but not initialized, so old-looking values are expected.</p>
+      <div class="shot">Screenshot 2 — frame immediately after <code>sub esp,0x28</code>, with register and telescope panels visible</div>
+    </section>
+
+    <section id="safe" class="card">
+      <h2>7. Establish the safe-copy baseline</h2>
+      <p>First locate the source line immediately after <code>strcpy</code>:</p>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>list copy_label</pre></div>
+      <p>In the supplied file, the following <code>printf</code> is line 15. If your editor inserted lines, use the line number shown by <code>list</code>.</p>
+      <div class="codebox"><div class="label">Pwndbg — replace POST_COPY_LINE if necessary</div><button class="copy">Copy</button><pre>break stack_lab.c:15
+continue
+regs eip ebp esp
+whatis buffer
+p/d sizeof(buffer)
+p/x &amp;buffer[0]
+p/x &amp;buffer[31]
+p/x &amp;buffer[32]
+hexdump &amp;buffer[0] 52
+telescope $ebp-0x28 13
+x/wx $ebp
+x/wx $ebp+4
+x/wx $ebp+8
+info frame</pre></div>
+      <p><code>whatis</code> should report <code>char [32]</code>; <code>sizeof</code> proves its size. Index 31 is the final valid byte and index 32 is the one-past-the-end boundary. <code>hexdump</code> displays 52 bytes: 32 buffer bytes, 8 padding bytes, 4 saved-EBP bytes, 4 saved-return-address bytes, and 4 parameter bytes. A short string writes its characters and a zero terminator; it does not erase the rest of an uninitialized buffer.</p>
+      <div class="diagram">Safe frame after strcpy("SAFE_INPUT")
+
+Higher addresses
+┌──────────────────────────────────────┐
+│ [EBP+8] parameter pointer            │ points to "SAFE_INPUT\0" elsewhere
+├──────────────────────────────────────┤
+│ [EBP+4] legitimate return address    │ unchanged
+├──────────────────────────────────────┤
+│ [EBP]   saved main EBP               │ unchanged
+├──────────────────────────────────────┤
+│ [EBP-8 .. EBP-1] padding (8 bytes)   │ unrelated preexisting bytes
+├──────────────────────────────────────┤
+│ [EBP-40 .. EBP-9] buffer (32 bytes)  │ SAFE_INPUT\0 + unchanged bytes
+└──────────────────────────────────────┘
+Lower addresses</div>
+      <div class="shot">Screenshot 3 — safe buffer, saved EBP, return address, and parameter in one 52-byte view</div>
+    </section>
+
+    <section id="overflow" class="card pagebreak">
+      <h2>8. Repeat with a visually marked overwrite</h2>
+      <p>The marker contains exactly 48 printable bytes:</p>
+      <div class="legend"><span class="chip a">32 × A: declared buffer</span><span class="chip c">8 × C: padding</span><span class="chip b">4 × B: saved EBP</span><span class="chip x">4 × X: saved return address</span></div>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>set args AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCBBBBXXXX
+show args
+run</pre></div>
+      <p><code>set args</code> replaces the program’s command-line arguments for future runs. <code>show args</code> verifies the exact string. <code>run</code> restarts the process; answer <code>y</code> if GDB asks to restart. Existing breakpoints remain.</p>
+      <p>At the pre-call breakpoint, use <code>continue</code> to reach the post-copy breakpoint. Then inspect the same region:</p>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>continue
+regs eip ebp esp
+hexdump &amp;buffer[0] 52
+telescope $ebp-0x28 13
+x/wx $ebp
+x/wx $ebp+4
+x/wx $ebp+8</pre></div>
+      <table><thead><tr><th>Offset from <code>buffer[0]</code></th><th>Expected bytes</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>0–31</td><td><code>41</code> / <code>AAAAAAAA…</code></td><td>Inside the 32-byte buffer.</td></tr>
+        <tr><td>32–39</td><td><code>43</code> / <code>CCCCCCCC</code></td><td>Outside the array, in eight padding bytes.</td></tr>
+        <tr><td>40–43</td><td><code>42</code> / <code>BBBB</code></td><td>Saved EBP becomes <code>0x42424242</code>.</td></tr>
+        <tr><td>44–47</td><td><code>58</code> / <code>XXXX</code></td><td>Saved return address becomes <code>0x58585858</code>.</td></tr>
+        <tr><td>48</td><td><code>00</code></td><td><code>strcpy</code>’s terminator reaches the first byte of the parameter slot.</td></tr>
+      </tbody></table>
+      <div class="diagram">Marked frame immediately after strcpy
+
+Higher addresses
+┌───────────────────────────────────────────┐
+│ [EBP+8] parameter slot      00 …          │ terminator also damages this pointer
+├───────────────────────────────────────────┤
+│ [EBP+4] saved return addr   58 58 58 58   │ "XXXX" = 0x58585858
+├───────────────────────────────────────────┤
+│ [EBP]   saved caller EBP    42 42 42 42   │ "BBBB" = 0x42424242
+├───────────────────────────────────────────┤
+│ padding, 8 bytes            43 × 8         │ "CCCCCCCC"
+├───────────────────────────────────────────┤
+│ buffer[32]                  41 × 32        │ 32 "A" bytes
+└───────────────────────────────────────────┘ ← ESP at this checkpoint
+Lower addresses</div>
+      <div class="callout key"><strong>The live registers are not corrupted yet.</strong> EBP still points to the current frame, and EIP still points inside <code>copy_label</code>. The memory values that future instructions will consume have been corrupted.</div>
+      <div class="shot">Screenshot 4 — Pwndbg hexdump/telescope view showing A, C, B, and X regions</div>
+    </section>
+
+    <section id="return" class="card">
+      <h2>9. Watch <code>leave</code> and <code>ret</code> consume the saved values</h2>
+      <p>Find the exact address of the <code>leave</code> instruction in your binary:</p>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>disassemble copy_label</pre></div>
+      <p>Substitute that address below. This avoids hard-coding an address that could differ after compiler or source changes.</p>
+      <div class="codebox"><div class="label">Pwndbg — replace LEAVE_ADDRESS</div><button class="copy">Copy</button><pre>break *LEAVE_ADDRESS
+continue
+regs eip ebp esp
+nearpc
+telescope $ebp 3</pre></div>
+      <p>Immediately before <code>leave</code>, the live EBP is still a valid frame address. Memory at <code>[EBP]</code> holds <code>0x42424242</code>, and <code>[EBP+4]</code> holds <code>0x58585858</code>.</p>
+      <h3>Execute only <code>leave</code></h3>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>si
+regs eip ebp esp
+nearpc
+telescope $esp 2</pre></div>
+      <p><code>leave</code> is equivalent to <code>mov esp,ebp</code> followed by <code>pop ebp</code>. Therefore EBP becomes <code>0x42424242</code>, while ESP advances to the saved-return-address slot. EIP points at <code>ret</code>, and <code>[ESP]</code> is <code>0x58585858</code>.</p>
+      <h3>Execute only <code>ret</code></h3>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>si
+regs eip ebp esp
+nearpc</pre></div>
+      <p><code>ret</code> takes the four-byte value at <code>[ESP]</code>, puts it into EIP, and adds four to ESP. EIP therefore becomes <code>0x58585858</code>. This is only an obvious marker, not a valid code address. Pwndbg may stop immediately with an invalid program counter or report <code>SIGSEGV</code> when execution is resumed.</p>
+      <div class="callout warn"><strong>Terminology checkpoint:</strong> the overflow first changed the <em>saved return address in memory</em>. It did not change live EIP at the moment of copying. EIP changed later, when <code>ret</code> consumed that saved value.</div>
+      <div class="shot">Screenshot 5 — before <code>ret</code>: EBP = 0x42424242 and [ESP] = 0x58585858<br><br>Screenshot 6 — after <code>ret</code>: EIP = 0x58585858</div>
+    </section>
+
+    <section id="lifetime" class="card">
+      <h2>10. What happens to a frame after return?</h2>
+      <p>Returning does not normally erase stack bytes. It restores the caller’s stack state, ending the callee’s local-variable lifetime and making that region available for reuse.</p>
+      <table><thead><tr><th>Call pattern</th><th>While <code>verify()</code> runs</th></tr></thead><tbody>
+        <tr><td><code>main</code> calls <code>username</code>, it returns; then <code>password</code>, it returns; then <code>verify</code>.</td><td>Only <code>main</code> and <code>verify</code> are active. Old username/password bytes may remain, but those frames and buffers no longer exist as valid objects.</td></tr>
+        <tr><td><code>main → username → password → verify</code> as nested calls.</td><td>All four frames are active. Each caller has not returned, so any local buffers in those older active frames still exist.</td></tr>
+      </tbody></table>
+      <div class="diagram">Sequential calls during verify()       Nested calls during verify()
+
+Higher addresses                     Higher addresses
+┌──────────────┐                      ┌──────────────┐
+│ main frame   │                      │ main frame   │
+├──────────────┤                      ├──────────────┤
+│ verify frame │                      │ username     │ ← buffer remains active
+└──────────────┘ ← ESP                ├──────────────┤
+                                      │ password     │ ← buffer remains active
+username/password bytes may           ├──────────────┤
+be stale below ESP, but their          │ verify       │
+object lifetimes have ended.           └──────────────┘ ← ESP</div>
+    </section>
+
+    <section id="mitigate" class="card pagebreak">
+      <h2>11. Restore defenses and compare</h2>
+      <p>The vulnerable flags were for observation only. Build a second binary with ordinary protections and replace the unsafe copy with a bounded operation in real software.</p>
+      <div class="codebox"><div class="label">Bash — protected comparison build</div><button class="copy">Copy</button><pre>gcc -m32 -O2 -g -Wall -Wextra -fstack-protector-strong -fPIE -pie -D_FORTIFY_SOURCE=2 -z noexecstack -o stack_lab32_protected stack_lab.c
+gdb -q ./stack_lab32_protected</pre></div>
+      <div class="codebox"><div class="label">Pwndbg</div><button class="copy">Copy</button><pre>checksec
+quit</pre></div>
+      <p>Pwndbg’s <code>checksec</code> summarizes hardening such as stack canaries, NX, and PIE. The protected build is a comparison, not a repair of the source-level bug: the correct fix is to prevent an oversized copy, for example by tracking the destination capacity and rejecting or truncating input deliberately.</p>
+      <div class="callout"><strong>Why defense in depth matters:</strong> a canary can detect some overwrites, NX blocks executing bytes on the stack, and PIE randomizes code locations. None makes an unbounded copy good programming practice.</div>
+    </section>
+
+    <section id="questions" class="card">
+      <h2>12. Review questions</h2>
+      <ol class="checklist">
+        <li>Why is <code>&amp;buffer[32]</code> useful even though the final valid element is <code>buffer[31]</code>?</li>
+        <li>Why can ESP move while EBP remains stable inside a function?</li>
+        <li>At the post-copy breakpoint, why is live EIP still valid even though <code>[EBP+4]</code> contains <code>0x58585858</code>?</li>
+        <li>What does <code>sub esp,0x28</code> reserve, and why is that larger than the declared array?</li>
+        <li>Is the value at <code>[EBP+8]</code> the source string itself? Explain.</li>
+        <li>After <code>copy_label</code> returns, do its old bytes necessarily disappear? Does its buffer remain a valid C object?</li>
+      </ol>
+      <details class="answer"><summary>Instructor key</summary>
+        <ol><li>It is the one-past-the-end boundary and proves the first address outside the array; calculating it is permitted, dereferencing it is not.</li><li>ESP tracks temporary pushes and call-alignment space, while EBP is deliberately used as a stable frame anchor.</li><li>The copy changed a future control value in memory. EIP changes only when execution reaches <code>ret</code>.</li><li>It reserves 40 bytes: the 32-byte array plus eight bytes of compiler-selected padding/alignment in this build.</li><li>No. It holds a four-byte pointer value; following that pointer reaches the string characters.</li><li>The physical bytes may remain until reused, but the local object’s lifetime ends and using it afterward is invalid.</li></ol>
+      </details>
+    </section>
+
+    <section id="reference" class="card">
+      <h2>Compact command reference</h2>
+      <table><thead><tr><th>Command</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td><code>si</code></td><td>Execute exactly one machine instruction, entering calls.</td></tr>
+        <tr><td><code>continue</code></td><td>Resume until a breakpoint, signal, or exit.</td></tr>
+        <tr><td><code>x/13wx ADDRESS</code></td><td>GDB: examine 13 hexadecimal words (four bytes each) from an address.</td></tr>
+        <tr><td><code>x/52bx ADDRESS</code></td><td>GDB: examine 52 individual bytes in hexadecimal.</td></tr>
+        <tr><td><code>telescope ADDRESS 13</code></td><td>Pwndbg: show 13 pointer-sized entries and follow recognizable pointers.</td></tr>
+        <tr><td><code>hexdump ADDRESS 52</code></td><td>Pwndbg: show 52 bytes with an ASCII interpretation.</td></tr>
+        <tr><td><code>distance A B</code></td><td>Pwndbg: calculate the byte distance between two expressions.</td></tr>
+        <tr><td><code>context</code></td><td>Pwndbg: redraw the enhanced stopped-process overview.</td></tr>
+      </tbody></table>
+      <p class="small">Addresses in screenshots are examples, not universal constants. ASLR affects stack addresses, and compiler versions can affect instruction addresses or padding. Derive locations from symbols, EBP-relative expressions, and your own disassembly.</p>
+      <h3>Official references</h3>
+      <ul><li><a href="https://github.com/pwndbg/pwndbg">Pwndbg GitHub repository</a></li><li><a href="https://pwndbg.re/stable/setup/">Pwndbg setup documentation</a></li><li><a href="https://pwndbg.re/stable/commands/context/context/">Pwndbg context command</a></li><li><a href="https://pwndbg.re/stable/commands/memory/hexdump/">Pwndbg hexdump command</a></li><li><a href="https://pwndbg.re/stable/commands/context/regs/">Pwndbg regs command</a></li><li><a href="https://pwndbg.re/stable/commands/misc/checksec/">Pwndbg checksec command</a></li></ul>
+    </section>
+  </article>
+</main>
+<footer>Local classroom lab · Ubuntu 22.04 · 32-bit x86 · GDB with Pwndbg</footer>
+<script>
+  document.querySelectorAll('.codebox').forEach(box=>{
+    const btn=box.querySelector('.copy'); const pre=box.querySelector('pre');
+    btn.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(pre.innerText);const old=btn.textContent;btn.textContent='Copied';setTimeout(()=>btn.textContent=old,1200)}catch(e){const r=document.createRange();r.selectNodeContents(pre);const s=getSelection();s.removeAllRanges();s.addRange(r)}});
+  });
+</script>
+</body>
+</html>
